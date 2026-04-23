@@ -1,0 +1,22 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Volunteer {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  passwordHash  String   // senha criptografada
+
+  name          String
+  location      String
+  availability  String
+  description   String
+  skills        String[]
+
+  createdAt     DateTime @default(now())
+}
