@@ -1,41 +1,29 @@
-// src/app/api/user-profile/route.ts
-
 import { prisma } from '@/src/lib/prisma';
-import jwt from 'jsonwebtoken';
+import { NextRequest, NextResponse } from 'next/server';
+import { verifyToken } from '@/src/lib/auth/authUtils';
 
-type JWTPayload = {
-  id: string;
-};
-
-export async function GET(req: Request) {
+export async function GET(request: NextRequest) {
   try {
     // =========================
-    // 1. pegar token
+    // 1. pegar token dos cookies
     // =========================
-    const authHeader = req.headers.get('authorization');
+    const token = request.cookies.get('auth_token')?.value;
 
-    if (!authHeader) {
-      return Response.json(
-        { error: 'No token provided' },
+    if (!token) {
+      return NextResponse.json(
+        { error: 'Não autenticado. Faça login novamente.' },
         { status: 401 }
       );
     }
 
-    const token = authHeader.split(' ')[1];
-
     // =========================
     // 2. validar token
     // =========================
-    let decoded: JWTPayload;
+    const decoded = verifyToken(token);
 
-    try {
-      decoded = jwt.verify(
-        token,
-        process.env.JWT_SECRET!
-      ) as JWTPayload;
-    } catch (err) {
-      return Response.json(
-        { error: 'Invalid token' },
+    if (!decoded) {
+      return NextResponse.json(
+        { error: 'Token inválido ou expirado. Faça login novamente.' },
         { status: 401 }
       );
     }
@@ -44,23 +32,33 @@ export async function GET(req: Request) {
     // 3. buscar usuário
     // =========================
     const user = await prisma.volunteer.findUnique({
-      where: { id: decoded.id },
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        location: true,
+        availability: true,
+        description: true,
+        skills: true,
+        createdAt: true
+      }
     });
 
     if (!user) {
-      return Response.json(
-        { error: 'User not found' },
+      return NextResponse.json(
+        { error: 'Usuário não encontrado' },
         { status: 404 }
       );
     }
 
     // =========================
-    // 4. normalizar skills (SEM ERRO TS)
+    // 4. normalizar skills
     // =========================
     let skills: string[] = [];
 
     if (Array.isArray(user.skills)) {
-      skills = user.skills as string[];
+      skills = user.skills;
     } else if (typeof user.skills === 'string') {
       skills = (user.skills as string)
         .split(',')
@@ -72,17 +70,25 @@ export async function GET(req: Request) {
     // =========================
     // 5. retorno padrão
     // =========================
-    return Response.json({
-      name: user.name,
-      skills,
-      location: user.location || 'Unknown',
+    return NextResponse.json({
+      success: true,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        skills,
+        location: user.location || 'Não informada',
+        availability: user.availability || 'Não informada',
+        description: user.description || 'Não informada',
+        createdAt: user.createdAt
+      }
     });
 
   } catch (error) {
-    console.error('USER PROFILE ERROR:', error);
+    console.error('Erro no perfil do usuário:', error);
 
-    return Response.json(
-      { error: 'Internal server error' },
+    return NextResponse.json(
+      { error: 'Erro interno do servidor' },
       { status: 500 }
     );
   }

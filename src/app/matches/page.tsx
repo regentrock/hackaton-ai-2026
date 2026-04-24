@@ -10,40 +10,18 @@ export default function MatchesPage() {
   useEffect(() => {
     async function fetchMatches() {
       try {
-        // =========================
-        // 1. pegar token
-        // =========================
-        const token = localStorage.getItem("token");
-
-        if (!token) {
-          setError("User not authenticated");
-          setLoading(false);
-          return;
-        }
-
-        // =========================
-        // 2. chamar API com auth
-        // =========================
         const res = await fetch(
           'https://hackaton-ai-2026.vercel.app/api/match',
           {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
+            credentials: 'include', // 🔥 ESSENCIAL
           }
         );
 
-        // =========================
-        // 3. tratar erro de backend
-        // =========================
         if (!res.ok) {
           const err = await res.json();
           throw new Error(err.error || "Failed to fetch matches");
         }
 
-        // =========================
-        // 4. agora é JSON direto (sem gambiarra)
-        // =========================
         const data = await res.json();
 
         setMatches(data);
@@ -59,9 +37,6 @@ export default function MatchesPage() {
     fetchMatches();
   }, []);
 
-  // =========================
-  // UI STATES
-  // =========================
   if (loading) return <p>Finding the best opportunities for you...</p>;
 
   if (error) return <p style={{ color: 'red' }}>Error: {error}</p>;
