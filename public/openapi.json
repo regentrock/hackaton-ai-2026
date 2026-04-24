@@ -4,6 +4,11 @@
     "title": "Volunteer API",
     "version": "1.0.0"
   },
+  "servers": [
+    {
+      "url": "https://hackaton-ai-2026.vercel.app"
+    }
+  ],
   "paths": {
     "/api/user-profile": {
       "get": {
