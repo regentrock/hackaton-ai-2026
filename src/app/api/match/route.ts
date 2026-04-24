@@ -79,7 +79,7 @@ Format:
         },
         body: JSON.stringify({
           input: prompt,
-          model_id: "meta-llama/llama-3-8b-instruct",
+          model_id: "ibm/granite-8b-code-instruct",
           project_id: process.env.IBM_PROJECT_ID,
           parameters: {
             decoding_method: "greedy",
