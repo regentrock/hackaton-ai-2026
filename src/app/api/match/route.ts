@@ -1,20 +1,53 @@
-export async function GET() {
+export async function GET(req: Request) {
   try {
     // =========================
-    // 1. Buscar usuário
+    // 0. pegar token do usuário
     // =========================
-    const userRes = await fetch(
-      "https://hackaton-ai-2026.vercel.app/api/user-profile"
-    );
-    const user = await userRes.json();
+    const authHeader = req.headers.get('authorization');
+
+    if (!authHeader) {
+      return Response.json(
+        { error: 'Unauthorized' },
+        { status: 401 }
+      );
+    }
 
     // =========================
-    // 2. Buscar oportunidades
+    // 1. Buscar usuário (COM TOKEN)
+    // =========================
+    const userRes = await fetch(
+      "https://hackaton-ai-2026.vercel.app/api/user-profile",
+      {
+        headers: {
+          Authorization: authHeader,
+        },
+      }
+    );
+
+    const user = await userRes.json();
+
+    if (!user || user.error) {
+      return Response.json(
+        { error: "Failed to fetch user", details: user },
+        { status: 500 }
+      );
+    }
+
+    // =========================
+    // 2. Buscar oportunidades (API real)
     // =========================
     const oppRes = await fetch(
-    `https://hackaton-ai-2026.vercel.app/api/opportunities?city=${user.location}`
+      `https://hackaton-ai-2026.vercel.app/api/opportunities?city=${encodeURIComponent(user.location)}`
     );
+
     const oppData = await oppRes.json();
+
+    if (!oppData || !oppData.opportunities) {
+      return Response.json(
+        { error: "Failed to fetch opportunities" },
+        { status: 500 }
+      );
+    }
 
     // =========================
     // 3. Gerar IAM token
@@ -33,13 +66,16 @@ export async function GET() {
     const iamData = await iamRes.json();
 
     if (!iamData.access_token) {
-      return Response.json({ error: iamData }, { status: 500 });
+      return Response.json(
+        { error: "Failed to generate IAM token", details: iamData },
+        { status: 500 }
+      );
     }
 
     const accessToken = iamData.access_token;
 
     // =========================
-    // 4. Prompt (melhorado)
+    // 4. Prompt (FORÇADO PRA JSON)
     // =========================
     const prompt = `
 You are an AI that matches volunteers with opportunities.
@@ -52,16 +88,22 @@ ${JSON.stringify(oppData.opportunities)}
 
 Rules:
 - Match based on skills first
-- Then consider location proximity
-- Return ONLY valid JSON
-- Max 5 results
+- Then location proximity
+- Maximum 5 results
 
-Format:
+CRITICAL:
+- Return ONLY valid JSON
+- DO NOT return code
+- DO NOT explain anything
+- DO NOT include text before or after
+- Output MUST start with [ and end with ]
+
+Example:
 [
   {
-    "title": "...",
-    "location": "...",
-    "reason": "..."
+    "title": "Example",
+    "location": "City",
+    "reason": "Explanation"
   }
 ]
 `;
@@ -79,7 +121,7 @@ Format:
         },
         body: JSON.stringify({
           input: prompt,
-          model_id: "ibm/granite-8b-code-instruct",
+          model_id: "ibm/granite-3-8b-instruct",
           project_id: process.env.IBM_PROJECT_ID,
           parameters: {
             decoding_method: "greedy",
@@ -101,12 +143,46 @@ Format:
 
     const text = data.results[0].generated_text;
 
-    return new Response(text, {
-      headers: { "Content-Type": "application/json" },
-    });
+    // =========================
+    // 6. SANITIZAR RESPOSTA DA IA (CRÍTICO)
+    // =========================
+    const jsonMatch = text.match(/\[[\s\S]*\]/);
+
+    if (!jsonMatch) {
+      console.error("AI RAW RESPONSE:", text);
+
+      return Response.json(
+        {
+          error: "AI did not return valid JSON",
+          raw: text,
+        },
+        { status: 500 }
+      );
+    }
+
+    let parsed;
+
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch (err) {
+      console.error("JSON PARSE ERROR:", err);
+
+      return Response.json(
+        {
+          error: "Failed to parse AI response",
+          raw: text,
+        },
+        { status: 500 }
+      );
+    }
+
+    // =========================
+    // 7. RETORNO LIMPO
+    // =========================
+    return Response.json(parsed);
 
   } catch (error: any) {
-    console.error(error);
+    console.error("MATCH ERROR:", error);
 
     return Response.json(
       { error: error.message },
@@ -114,5 +190,3 @@ Format:
     );
   }
 }
-
-console.log("API KEY:", process.env.IBM_API_KEY);
