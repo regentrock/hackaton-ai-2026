@@ -1,24 +1,28 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Ignorar erros do ESLint durante o build em produção
   eslint: {
     ignoreDuringBuilds: true,
   },
-  // Ignorar erros de tipos durante o build em produção
   typescript: {
     ignoreBuildErrors: true,
   },
-  // Configuração do webpack para ignorar warnings
+  // Configuração webpack simplificada
   webpack: (config, { isServer }) => {
-    // Ignorar warnings de módulos
-    config.ignoreWarnings = [{ module: /node_modules/ }];
-    
-    // Configuração específica para o Prisma no servidor
     if (isServer) {
-      config.externals = [...(config.externals || []), 'prisma', '@prisma/client'];
+      // Garantir que o Prisma não seja externalizado
+      if (config.externals) {
+        const externals = config.externals;
+        if (Array.isArray(externals)) {
+          config.externals = externals.filter((external) => {
+            if (typeof external === 'string') {
+              return external !== 'prisma' && external !== '@prisma/client';
+            }
+            return true;
+          });
+        }
+      }
     }
-    
     return config;
   },
 };
