@@ -12,7 +12,7 @@ export async function GET() {
     // 2. Buscar oportunidades
     // =========================
     const oppRes = await fetch(
-      "https://hackaton-ai-2026.vercel.app/api/opportunities"
+    `https://hackaton-ai-2026.vercel.app/api/opportunities?city=${user.location}`
     );
     const oppData = await oppRes.json();
 
