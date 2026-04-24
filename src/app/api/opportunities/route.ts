@@ -1,9 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/src/lib/auth/authUtils';
 
+interface GlobalGivingProject {
+  id: string;
+  title: string;
+  summary: string;
+  activities: string;
+  themeName: string;
+  organization: {
+    id: string;
+    name: string;
+    mission: string;
+  };
+  country: string;
+  iso3166CountryCode: string;
+  contactCity: string;
+  contactCountry: string;
+  status: string;
+  funding: number;
+  goal: number;
+  remaining: number;
+  projectLink: string;
+}
+
 export async function GET(request: NextRequest) {
   try {
-    console.log('=== OPPORTUNITIES API ===');
+    console.log('=== OPPORTUNITIES API - GLOBALGIVING ONLY ===');
     
     // =========================
     // 1. Autenticação
@@ -64,57 +86,87 @@ export async function GET(request: NextRequest) {
     // =========================
     // 3. Buscar projetos REAIS do GlobalGiving
     // =========================
-    let projects = [];
+    // Usando endpoint correto: /countries/BR/projects/active [citation:1][citation:6]
+    const projects = await fetchGlobalGivingProjects();
     
-    try {
-      projects = await fetchGlobalGivingProjects(user);
-      console.log(`✅ Found ${projects.length} real projects from GlobalGiving`);
-    } catch (error) {
-      console.error('❌ Error fetching from GlobalGiving:', error);
-      return NextResponse.json(
-        { error: 'Failed to fetch opportunities from GlobalGiving' },
-        { status: 500 }
-      );
-    }
-
-    if (projects.length === 0) {
+    if (!projects || projects.length === 0) {
       return NextResponse.json({
-        success: true,
+        success: false,
+        error: 'No projects found from GlobalGiving API',
         opportunities: [],
-        message: 'Nenhum projeto encontrado no GlobalGiving para sua região',
         total: 0
       });
     }
 
+    console.log(`✅ Retrieved ${projects.length} real projects from GlobalGiving`);
+
     // =========================
-    // 4. Calcular match score para cada projeto
+    // 4. Filtrar por localização (se possível)
     // =========================
-    const opportunities = projects.map((project: any) => {
-      const matchScore = calculateMatchScore(user, project);
-      const matchedSkills = findMatchingSkills(user.skills || [], project.skills || []);
+    let filteredProjects = projects;
+    
+    if (user.location && user.location !== 'Não informada') {
+      const userCity = user.location.split(',')[0].trim().toLowerCase();
+      filteredProjects = projects.filter(project => 
+        project.contactCity?.toLowerCase().includes(userCity) ||
+        project.contactCountry?.toLowerCase() === 'brazil'
+      );
+      
+      // Se não encontrar projetos na cidade, mostrar todos do Brasil
+      if (filteredProjects.length === 0) {
+        filteredProjects = projects;
+      }
+    }
+
+    // =========================
+    // 5. Formatar oportunidades (APENAS dados reais)
+    // =========================
+    const opportunities = filteredProjects.map(project => ({
+      id: project.id,
+      title: project.title,
+      organization: project.organization?.name || 'GlobalGiving Partner',
+      location: `${project.contactCity || 'Brazil'}, ${project.contactCountry || 'BR'}`,
+      description: project.summary || project.activities || project.organization?.mission,
+      skills: extractSkillsFromProject(project),
+      contactEmail: null,
+      theme: project.themeName,
+      funding: {
+        raised: project.funding,
+        goal: project.goal,
+        remaining: project.remaining
+      },
+      projectLink: project.projectLink,
+      status: project.status,
+      source: 'GlobalGiving'
+    }));
+
+    // =========================
+    // 6. Calcular match score baseado nas skills do usuário
+    // =========================
+    const opportunitiesWithScore = opportunities.map(opp => {
+      const matchScore = calculateMatchScoreWithUserSkills(user, opp);
+      const matchedSkills = user.skills?.filter(skill => 
+        opp.skills.some(oppSkill => 
+          oppSkill.toLowerCase().includes(skill.toLowerCase()) ||
+          skill.toLowerCase().includes(oppSkill.toLowerCase())
+        )
+      ) || [];
       
       return {
-        id: project.id,
-        title: project.title,
-        organization: project.organization,
-        location: project.location,
-        description: project.description,
-        skills: project.skills,
-        contactEmail: project.contactEmail,
-        themeName: project.themeName,
-        matchScore: matchScore,
-        matchedSkills: matchedSkills,
-        matchReason: generateMatchReason(matchScore, matchedSkills, project.title)
+        ...opp,
+        matchScore,
+        matchedSkills: matchedSkills.slice(0, 3),
+        matchReason: generateMatchReason(matchScore, matchedSkills, opp.title)
       };
     });
 
     // Ordenar por match score
-    opportunities.sort((a, b) => b.matchScore - a.matchScore);
+    opportunitiesWithScore.sort((a, b) => b.matchScore - a.matchScore);
 
     return NextResponse.json({
       success: true,
-      opportunities: opportunities.slice(0, 15),
-      total: opportunities.length,
+      opportunities: opportunitiesWithScore,
+      total: opportunitiesWithScore.length,
       source: 'GlobalGiving API',
       userSkills: user.skills || []
     });
@@ -122,198 +174,130 @@ export async function GET(request: NextRequest) {
   } catch (error: any) {
     console.error('Opportunities API error:', error);
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: error.message || 'Failed to fetch from GlobalGiving API' },
       { status: 500 }
     );
   }
 }
 
 /**
- * Busca projetos REAIS do GlobalGiving
+ * Busca projetos reais do GlobalGiving
+ * Usa o endpoint /countries/BR/projects/active conforme documentação [citation:1][citation:6]
  */
-async function fetchGlobalGivingProjects(user: any): Promise<any[]> {
+async function fetchGlobalGivingProjects(): Promise<GlobalGivingProject[]> {
   const apiKey = process.env.GLOBAL_GIVING_API_KEY;
   
   if (!apiKey) {
     throw new Error('GLOBAL_GIVING_API_KEY not configured');
   }
 
-  // Extrair país e cidade do usuário
-  let country = 'BR'; // Brasil
-  let city = '';
+  let allProjects: GlobalGivingProject[] = [];
+  let hasNext = true;
+  let nextProjectId: string | null = null;
   
-  if (user.location && user.location !== 'Não informada') {
-    city = user.location.split(',')[0].trim();
-  }
+  // Máximo de 30 projetos (3 páginas de 10 resultados cada)
+  let pageCount = 0;
+  const MAX_PAGES = 3;
 
-  // URL da API do GlobalGiving para projetos no Brasil
-  // Documentação: https://www.globalgiving.org/api/
-  const url = `https://api.globalgiving.org/api/public/projectservice/countries/${country}/projects?api_key=${apiKey}&api_version=2`;
-  
-  console.log('Fetching from GlobalGiving API...');
-  
-  const response = await fetch(url, {
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json'
-    },
-    next: { revalidate: 3600 } // Cache por 1 hora
-  });
-
-  if (!response.ok) {
-    throw new Error(`GlobalGiving API error: ${response.status} - ${response.statusText}`);
-  }
-
-  const data = await response.json();
-  
-  // Extrair projetos da resposta
-  let projects = data.projects?.project || [];
-  
-  console.log(`Total projects from GlobalGiving: ${projects.length}`);
-  
-  // Filtrar por cidade se especificada
-  if (city) {
-    const cityLower = city.toLowerCase();
-    projects = projects.filter((p: any) => {
-      const projectCity = p.location?.city?.toLowerCase() || '';
-      const projectCountry = p.location?.country?.toLowerCase() || '';
-      return projectCity.includes(cityLower) || projectCountry === 'brazil';
+  while (hasNext && pageCount < MAX_PAGES) {
+    // Construir URL conforme documentação [citation:1]
+    let url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}`;
+    if (nextProjectId) {
+      url += `&nextProjectId=${nextProjectId}`;
+    }
+    
+    console.log(`Fetching GlobalGiving projects (page ${pageCount + 1})...`);
+    
+    const response = await fetch(url, {
+      headers: { 
+        'Accept': 'application/json',
+        'Content-Type': 'application/json'
+      },
+      next: { revalidate: 3600 } // Cache por 1 hora
     });
-    console.log(`Filtered to ${projects.length} projects near ${city}`);
+
+    if (!response.ok) {
+      throw new Error(`GlobalGiving API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const projects = data.projects?.project || [];
+    
+    allProjects = [...allProjects, ...projects];
+    
+    // Verificar se há mais resultados [citation:1]
+    hasNext = data.projects?.hasNext === 'true' || data.projects?.hasNext === true;
+    nextProjectId = data.projects?.nextProjectId || null;
+    pageCount++;
   }
-  
-  // Mapear para o formato que usamos
-  return projects.slice(0, 30).map((project: any) => ({
-    id: project.id,
-    title: project.title || 'Projeto de Voluntariado',
-    organization: project.organization?.name || 'Organização Parceira',
-    location: `${project.location?.city || 'Brasil'}, ${project.location?.country || 'BR'}`,
-    description: project.summary || project.description || 'Ajude este projeto através de voluntariado',
-    skills: extractSkillsFromProject(project),
-    contactEmail: project.contactEmail || 'voluntarios@globalgiving.org',
-    themeName: project.themeName || 'Desenvolvimento Social',
-    url: project.url
-  }));
+
+  console.log(`Total projects fetched: ${allProjects.length}`);
+  return allProjects;
 }
 
 /**
- * Extrai habilidades relevantes do projeto
+ * Extrai habilidades do projeto baseado no tema e atividades
  */
-function extractSkillsFromProject(project: any): string[] {
+function extractSkillsFromProject(project: GlobalGivingProject): string[] {
   const skills: string[] = [];
-  const text = `${project.title || ''} ${project.summary || ''} ${project.description || ''} ${project.themeName || ''}`.toLowerCase();
+  const text = `${project.themeName || ''} ${project.title || ''} ${project.organization?.mission || ''}`.toLowerCase();
   
-  // Mapeamento de palavras-chave para habilidades
-  const keywordMap: { [key: string]: string[] } = {
-    'educação': ['Ensino', 'Educação', 'Crianças', 'Escola'],
-    'tecnologia': ['Tecnologia', 'Programação', 'Desenvolvimento Web', 'TI'],
+  const skillMapping: { [key: string]: string[] } = {
+    'educação': ['Ensino', 'Educação', 'Crianças', 'Pedagogia'],
+    'tecnologia': ['Tecnologia', 'Programação', 'TI', 'Desenvolvimento'],
     'saúde': ['Saúde', 'Medicina', 'Enfermagem', 'Bem-estar'],
     'ambiente': ['Meio Ambiente', 'Sustentabilidade', 'Ecologia'],
     'social': ['Assistência Social', 'Comunidade', 'Ação Social'],
     'cultura': ['Arte', 'Cultura', 'Música', 'Design'],
     'esporte': ['Esporte', 'Atividade Física', 'Recreação'],
-    'alimentação': ['Alimentação', 'Nutrição', 'Culinária'],
-    'água': ['Água', 'Saneamento', 'Higiene'],
-    'empoderamento': ['Empoderamento', 'Liderança', 'Mentoria']
+    'comunidade': ['Comunidade', 'Liderança', 'Organização']
   };
   
-  for (const [key, value] of Object.entries(keywordMap)) {
+  for (const [key, value] of Object.entries(skillMapping)) {
     if (text.includes(key)) {
       skills.push(...value);
     }
   }
   
-  // Habilidades específicas baseadas no título
-  if (text.includes('ensin') || text.includes('educa')) {
-    skills.push('Ensino', 'Comunicação');
-  }
-  if (text.includes('tech') || text.includes('program')) {
-    skills.push('Programação', 'Tecnologia');
-  }
-  if (text.includes('saude') || text.includes('medic')) {
-    skills.push('Saúde', 'Atendimento');
-  }
-  
-  // Remover duplicatas e limitar
-  const uniqueSkills = [...new Set(skills)];
-  return uniqueSkills.slice(0, 5);
+  return [...new Set(skills)].slice(0, 5);
 }
 
 /**
- * Calcula match score baseado nas habilidades do usuário e do projeto
+ * Calcula match score baseado nas habilidades do usuário
  */
-function calculateMatchScore(user: any, project: any): number {
-  const userSkills = user.skills?.map((s: string) => s.toLowerCase()) || [];
-  const projectSkills = project.skills?.map((s: string) => s.toLowerCase()) || [];
-  
-  if (userSkills.length === 0) {
-    // Base score se não tem habilidades cadastradas
-    return 50;
+function calculateMatchScoreWithUserSkills(user: any, opportunity: any): number {
+  if (!user.skills || user.skills.length === 0) {
+    return 50; // Score neutro
   }
   
-  if (projectSkills.length === 0) {
-    return 45;
+  if (!opportunity.skills || opportunity.skills.length === 0) {
+    return 40;
   }
   
-  // Calcular matching
+  const userSkillsLower = user.skills.map((s: string) => s.toLowerCase());
   let matchCount = 0;
-  for (const userSkill of userSkills) {
-    for (const projectSkill of projectSkills) {
-      if (userSkill.includes(projectSkill) || projectSkill.includes(userSkill)) {
+  
+  for (const userSkill of userSkillsLower) {
+    for (const oppSkill of opportunity.skills) {
+      if (userSkill.includes(oppSkill.toLowerCase()) || oppSkill.toLowerCase().includes(userSkill)) {
         matchCount++;
         break;
       }
     }
   }
   
-  // Score percentual baseado em quantas habilidades do projeto o usuário tem
-  const skillScore = (matchCount / projectSkills.length) * 70;
-  
-  // Bonus por localização
-  let locationBonus = 0;
-  const userLocation = user.location?.toLowerCase() || '';
-  const projectLocation = project.location?.toLowerCase() || '';
-  
-  if (userLocation && projectLocation) {
-    if (userLocation.includes('remoto') || projectLocation.includes('remoto')) {
-      locationBonus = 30;
-    } else if (userLocation.split(',')[0] === projectLocation.split(',')[0]) {
-      locationBonus = 30; // Mesma cidade
-    } else if (userLocation.split(',')[1] === projectLocation.split(',')[1]) {
-      locationBonus = 15; // Mesmo estado
-    }
-  }
-  
-  let totalScore = skillScore + locationBonus;
-  
-  // Garantir entre 0 e 100
-  return Math.min(100, Math.max(0, Math.floor(totalScore)));
-}
-
-function findMatchingSkills(userSkills: string[], projectSkills: string[]): string[] {
-  const matches: string[] = [];
-  const userSkillsLower = userSkills.map(s => s.toLowerCase());
-  
-  for (const projectSkill of projectSkills) {
-    if (userSkillsLower.some(us => us.includes(projectSkill.toLowerCase()) || projectSkill.toLowerCase().includes(us))) {
-      matches.push(projectSkill);
-    }
-  }
-  
-  return matches.slice(0, 3);
+  const score = (matchCount / opportunity.skills.length) * 100;
+  return Math.min(100, Math.max(20, Math.floor(score)));
 }
 
 function generateMatchReason(score: number, matchedSkills: string[], title: string): string {
-  if (score >= 80) {
-    return `🎯 Excelente match! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são ideais para este projeto.`;
+  if (score >= 80 && matchedSkills.length > 0) {
+    return `🎯 Excelente match! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são muito relevantes para este projeto.`;
   } else if (score >= 60) {
-    if (matchedSkills.length > 0) {
-      return `👍 Bom match! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são relevantes para "${title}".`;
-    }
-    return `👍 Este projeto alinha com seu perfil. Considere se candidatar!`;
+    return `👍 Bom match! Este projeto alinha com seu perfil.`;
   } else if (score >= 40) {
-    return `💡 Oportunidade interessante. Você pode desenvolver novas habilidades enquanto ajuda.`;
+    return `💡 Oportunidade interessante para desenvolver novas habilidades.`;
   } else {
-    return `📚 Uma chance de explorar novas áreas de atuação e fazer a diferença.`;
+    return `📚 Uma chance de explorar novas áreas e fazer a diferença.`;
   }
 }

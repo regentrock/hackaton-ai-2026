@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
     if (!token) {
       return NextResponse.json(
-        { error: 'Unauthorized - Token não fornecido' },
+        { error: 'Unauthorized' },
         { status: 401 }
       );
     }
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
     }
 
     // =========================
-    // 2. Buscar oportunidades
+    // 2. Buscar oportunidades reais
     // =========================
     const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
                    (request.headers.get('host') ? `https://${request.headers.get('host')}` : 'http://localhost:3000');
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
     if (!opportunitiesRes.ok) {
       console.error('Opportunities API returned:', opportunitiesRes.status);
       return NextResponse.json(
-        { error: 'Failed to fetch opportunities' },
+        { error: 'Failed to fetch opportunities from GlobalGiving' },
         { status: 500 }
       );
     }
@@ -58,14 +58,11 @@ export async function GET(request: NextRequest) {
     
     if (!data.success || !data.opportunities) {
       return NextResponse.json(
-        { error: 'Invalid opportunities data' },
+        { error: 'No opportunities found' },
         { status: 500 }
       );
     }
 
-    // =========================
-    // 3. Retornar matches (já ordenados por score)
-    // =========================
     return NextResponse.json(data.opportunities);
 
   } catch (error: any) {

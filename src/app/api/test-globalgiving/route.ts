@@ -3,67 +3,49 @@ import { NextResponse } from 'next/server';
 export async function GET() {
   const apiKey = process.env.GLOBAL_GIVING_API_KEY;
   
+  if (!apiKey) {
+    return NextResponse.json({ 
+      error: 'API key not configured',
+      hasKey: false 
+    }, { status: 500 });
+  }
+
   const results: any = {
-    hasApiKey: !!apiKey,
-    apiKeyPreview: apiKey ? `${apiKey.substring(0, 8)}...` : null,
+    apiKeyPresent: true,
+    apiKeyPreview: `${apiKey.substring(0, 8)}...`,
     tests: []
   };
 
-  // Teste 1: Verificar se a API Key existe
-  if (!apiKey) {
-    results.error = 'GLOBAL_GIVING_API_KEY not configured';
-    return NextResponse.json(results, { status: 500 });
-  }
-
-  // Teste 2: Tentar endpoint de projetos no Brasil
+  // Teste 1: Buscar projetos ativos no Brasil
+  // Conforme documentação: /api/public/projectservice/countries/{iso}/projects/active [citation:1]
   try {
-    const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects?api_key=${apiKey}`;
+    const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}`;
     console.log('Testing URL:', url.replace(apiKey, 'HIDDEN'));
     
     const response = await fetch(url, {
-      headers: {
-        'Accept': 'application/json',
-      },
+      headers: { 'Accept': 'application/json' },
     });
 
+    const data = await response.json();
+    
     results.tests.push({
-      endpoint: '/countries/BR/projects',
+      endpoint: '/countries/BR/projects/active',
       status: response.status,
-      ok: response.ok
+      ok: response.ok,
+      projectsFound: data.projects?.project?.length || 0,
+      hasNext: data.projects?.hasNext || false
     });
 
-    if (response.ok) {
-      const data = await response.json();
-      results.projectsCount = data.projects?.project?.length || 0;
-      results.sampleProject = data.projects?.project?.[0] || null;
-    } else {
-      const text = await response.text();
-      results.errorResponse = text.substring(0, 500);
+    if (data.projects?.project?.length > 0) {
+      results.sampleProject = {
+        id: data.projects.project[0].id,
+        title: data.projects.project[0].title,
+        organization: data.projects.project[0].organization?.name
+      };
     }
   } catch (error: any) {
     results.tests.push({
-      endpoint: '/countries/BR/projects',
-      error: error.message
-    });
-  }
-
-  // Teste 3: Tentar endpoint de organizações
-  try {
-    const url = `https://api.globalgiving.org/v2/atlas/organizations/BR?api_key=${apiKey}`;
-    const response = await fetch(url, {
-      headers: {
-        'Accept': 'application/json',
-      },
-    });
-
-    results.tests.push({
-      endpoint: '/v2/atlas/organizations/BR',
-      status: response.status,
-      ok: response.ok
-    });
-  } catch (error: any) {
-    results.tests.push({
-      endpoint: '/v2/atlas/organizations/BR',
+      endpoint: '/countries/BR/projects/active',
       error: error.message
     });
   }
