@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  output   = "../src/lib/prisma/generated"
 }
 
 datasource db {
@@ -10,7 +11,7 @@ datasource db {
 model Volunteer {
   id            String   @id @default(uuid())
   email         String   @unique
-  passwordHash  String   // senha criptografada
+  passwordHash  String
 
   name          String
   location      String

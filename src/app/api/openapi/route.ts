@@ -9,7 +9,8 @@ export async function GET() {
     const data = JSON.parse(fileContents);
     
     return NextResponse.json(data);
-  } catch (error) {
+  } catch {
+    // Se o arquivo não existir, retorna um erro 404
     return NextResponse.json(
       { error: 'Arquivo openapi.json não encontrado' },
       { status: 404 }

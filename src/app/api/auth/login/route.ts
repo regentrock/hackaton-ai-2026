@@ -41,7 +41,8 @@ export async function POST(request: NextRequest) {
     const token = generateToken(volunteer.id, volunteer.email);
 
     // Remover passwordHash do retorno
-    const { passwordHash: _passwordHash, ...userWithoutPassword } = volunteer;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash: _, ...userWithoutPassword } = volunteer;
 
     // Criar resposta
     const response = NextResponse.json(
