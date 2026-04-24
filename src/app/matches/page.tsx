@@ -5,10 +5,14 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 
 interface Match {
+  id: string;
   title: string;
-  organization?: string;
+  organization: string;
   location: string;
-  reason: string;
+  description: string;
+  skills: string[];
+  contactEmail: string;
+  matchScore?: number;
 }
 
 export default function MatchesPage() {
@@ -19,13 +23,11 @@ export default function MatchesPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // Redirecionar se não estiver autenticado
     if (!authLoading && !user) {
       router.push('/login');
       return;
     }
 
-    // Se estiver autenticado, buscar matches
     if (user) {
       fetchMatches();
     }
@@ -36,10 +38,8 @@ export default function MatchesPage() {
       setLoading(true);
       setError(null);
 
-      // Usar URL relativa para funcionar em qualquer ambiente
       const res = await fetch('/api/match', {
-        method: 'GET',
-        credentials: 'include', // ESSENCIAL para enviar os cookies
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
         },
@@ -47,17 +47,15 @@ export default function MatchesPage() {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `Erro ${res.status}: Falha ao buscar oportunidades`);
+        throw new Error(errorData.error || `Erro ${res.status}`);
       }
 
       const data = await res.json();
-      
-      // Garantir que data é um array
       setMatches(Array.isArray(data) ? data : []);
       
     } catch (err: any) {
-      console.error("ERROR fetching matches:", err);
-      setError(err.message || "Erro ao carregar oportunidades");
+      console.error('Error fetching matches:', err);
+      setError(err.message || 'Erro ao carregar oportunidades');
     } finally {
       setLoading(false);
     }
@@ -67,26 +65,21 @@ export default function MatchesPage() {
     return (
       <div style={styles.loadingContainer}>
         <div style={styles.spinner}></div>
-        <p style={styles.loadingText}>Encontrando as melhores oportunidades para você...</p>
+        <p>Encontrando as melhores oportunidades para você...</p>
       </div>
     );
   }
 
-  if (!user) {
-    return null; // Será redirecionado pelo useEffect
-  }
+  if (!user) return null;
 
   if (error) {
     return (
       <div style={styles.container}>
         <div style={styles.errorCard}>
-          <h2 style={styles.errorTitle}>❌ Ops! Algo deu errado</h2>
-          <p style={styles.errorMessage}>{error}</p>
-          <button onClick={() => fetchMatches()} style={styles.retryButton}>
+          <h2>❌ Erro</h2>
+          <p>{error}</p>
+          <button onClick={fetchMatches} style={styles.retryButton}>
             Tentar Novamente
-          </button>
-          <button onClick={() => router.push('/dashboard')} style={styles.backButton}>
-            Voltar ao Dashboard
           </button>
         </div>
       </div>
@@ -95,49 +88,37 @@ export default function MatchesPage() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.header}>
-        <h1 style={styles.title}>🤝 Oportunidades de Voluntariado</h1>
-        <p style={styles.subtitle}>
-          Baseado no seu perfil, estas oportunidades podem ser ideais para você
-        </p>
-      </div>
-
+      <h1 style={styles.title}>🤝 Oportunidades para Você</h1>
+      
       {matches.length === 0 ? (
         <div style={styles.emptyCard}>
-          <p style={styles.emptyIcon}>🔍</p>
-          <p style={styles.emptyText}>Nenhuma oportunidade encontrada no momento.</p>
-          <p style={styles.emptyHint}>Tente atualizar seu perfil com mais habilidades ou localização.</p>
-          <button onClick={() => router.push('/dashboard')} style={styles.backButton}>
-            Voltar ao Dashboard
-          </button>
+          <p>Nenhuma oportunidade encontrada no momento.</p>
+          <p>Tente atualizar seu perfil com mais habilidades.</p>
         </div>
       ) : (
-        <div style={styles.matchesGrid}>
-          {matches.map((match, index) => (
-            <div key={index} style={styles.matchCard}>
-              <div style={styles.matchNumber}>#{index + 1}</div>
-              <h2 style={styles.matchTitle}>{match.title}</h2>
-              {match.organization && (
-                <p style={styles.matchOrg}>
-                  <strong>🏢 Organização:</strong> {match.organization}
-                </p>
+        <div style={styles.grid}>
+          {matches.map((match) => (
+            <div key={match.id} style={styles.card}>
+              <h2>{match.title}</h2>
+              <p><strong>🏢 {match.organization}</strong></p>
+              <p><strong>📍 {match.location}</strong></p>
+              <p>{match.description}</p>
+              {match.skills && match.skills.length > 0 && (
+                <div style={styles.skills}>
+                  {match.skills.map((skill, i) => (
+                    <span key={i} style={styles.skillTag}>{skill}</span>
+                  ))}
+                </div>
               )}
-              <p style={styles.matchLocation}>
-                <strong>📍 Localização:</strong> {match.location}
-              </p>
-              <p style={styles.matchReason}>
-                <strong>💡 Por que esta oportunidade?</strong>
-                <br />
-                {match.reason}
-              </p>
+              {match.matchScore && (
+                <div style={styles.matchScore}>
+                  Compatibilidade: {match.matchScore}%
+                </div>
+              )}
             </div>
           ))}
         </div>
       )}
-      
-      <button onClick={() => router.push('/dashboard')} style={styles.backButtonBottom}>
-        ← Voltar ao Dashboard
-      </button>
     </div>
   );
 }
@@ -147,177 +128,87 @@ const styles: { [key: string]: React.CSSProperties } = {
     maxWidth: '1200px',
     margin: '0 auto',
     padding: '2rem',
-    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-  },
-  header: {
-    textAlign: 'center',
-    marginBottom: '2rem',
+    fontFamily: 'system-ui, -apple-system, sans-serif',
   },
   title: {
     fontSize: '2rem',
-    color: '#1f2937',
-    marginBottom: '0.5rem',
+    marginBottom: '2rem',
+    textAlign: 'center',
   },
-  subtitle: {
-    fontSize: '1rem',
-    color: '#6b7280',
-  },
-  matchesGrid: {
+  grid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))',
     gap: '1.5rem',
-    marginBottom: '2rem',
   },
-  matchCard: {
-    position: 'relative' as const,
-    backgroundColor: '#ffffff',
+  card: {
+    backgroundColor: '#fff',
     borderRadius: '12px',
     padding: '1.5rem',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-    transition: 'transform 0.2s, box-shadow 0.2s',
+    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
     border: '1px solid #e5e7eb',
   },
-  matchNumber: {
-    position: 'absolute' as const,
-    top: '-10px',
-    left: '10px',
-    backgroundColor: '#c1121f',
-    color: 'white',
-    padding: '2px 8px',
+  skills: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '0.5rem',
+    marginTop: '1rem',
+  },
+  skillTag: {
+    backgroundColor: '#e5e7eb',
+    padding: '0.25rem 0.75rem',
     borderRadius: '20px',
     fontSize: '0.75rem',
+  },
+  matchScore: {
+    marginTop: '1rem',
+    padding: '0.5rem',
+    backgroundColor: '#dcfce7',
+    borderRadius: '8px',
+    textAlign: 'center',
+    fontSize: '0.875rem',
     fontWeight: 'bold',
-  },
-  matchTitle: {
-    fontSize: '1.25rem',
-    fontWeight: '600',
-    color: '#1f2937',
-    marginTop: '0.5rem',
-    marginBottom: '1rem',
-  },
-  matchOrg: {
-    fontSize: '0.875rem',
-    color: '#374151',
-    marginBottom: '0.5rem',
-  },
-  matchLocation: {
-    fontSize: '0.875rem',
-    color: '#374151',
-    marginBottom: '0.5rem',
-  },
-  matchReason: {
-    fontSize: '0.875rem',
-    color: '#6b7280',
-    marginTop: '0.75rem',
-    paddingTop: '0.75rem',
-    borderTop: '1px solid #e5e7eb',
-    lineHeight: '1.5',
   },
   loadingContainer: {
     display: 'flex',
-    flexDirection: 'column' as const,
+    flexDirection: 'column',
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: '100vh',
-    backgroundColor: '#f9fafb',
   },
   spinner: {
-    width: '50px',
-    height: '50px',
+    width: '40px',
+    height: '40px',
     border: '4px solid #e5e7eb',
     borderTopColor: '#c1121f',
     borderRadius: '50%',
     animation: 'spin 1s linear infinite',
   },
-  loadingText: {
-    marginTop: '1rem',
-    fontSize: '1rem',
-    color: '#6b7280',
-  },
   errorCard: {
     backgroundColor: '#fee2e2',
-    border: '1px solid #fecaca',
-    borderRadius: '12px',
     padding: '2rem',
-    textAlign: 'center' as const,
-    maxWidth: '500px',
-    margin: '0 auto',
-  },
-  errorTitle: {
-    fontSize: '1.25rem',
-    color: '#991b1b',
-    marginBottom: '1rem',
-  },
-  errorMessage: {
-    color: '#7f1d1d',
-    marginBottom: '1.5rem',
-  },
-  emptyCard: {
-    backgroundColor: '#f3f4f6',
     borderRadius: '12px',
-    padding: '3rem',
-    textAlign: 'center' as const,
-    maxWidth: '600px',
-    margin: '0 auto',
-  },
-  emptyIcon: {
-    fontSize: '3rem',
-    marginBottom: '1rem',
-  },
-  emptyText: {
-    fontSize: '1.125rem',
-    color: '#4b5563',
-    marginBottom: '0.5rem',
-  },
-  emptyHint: {
-    fontSize: '0.875rem',
-    color: '#6b7280',
+    textAlign: 'center',
   },
   retryButton: {
     backgroundColor: '#c1121f',
-    color: 'white',
+    color: '#fff',
     padding: '0.5rem 1rem',
     border: 'none',
     borderRadius: '8px',
-    fontSize: '0.875rem',
-    fontWeight: '500',
     cursor: 'pointer',
-    marginRight: '0.5rem',
+    marginTop: '1rem',
   },
-  backButton: {
-    backgroundColor: '#6b7280',
-    color: 'white',
-    padding: '0.5rem 1rem',
-    border: 'none',
-    borderRadius: '8px',
-    fontSize: '0.875rem',
-    fontWeight: '500',
-    cursor: 'pointer',
-  },
-  backButtonBottom: {
-    display: 'block',
+  emptyCard: {
+    textAlign: 'center',
+    padding: '3rem',
     backgroundColor: '#f3f4f6',
-    color: '#374151',
-    padding: '0.75rem 1.5rem',
-    border: '1px solid #e5e7eb',
-    borderRadius: '8px',
-    fontSize: '0.875rem',
-    fontWeight: '500',
-    cursor: 'pointer',
-    margin: '1rem auto 0',
-    textAlign: 'center' as const,
+    borderRadius: '12px',
   },
 };
 
-// Adicionar keyframes para a animação do spinner
+// Adicionar keyframe para animação
 if (typeof document !== 'undefined') {
   const style = document.createElement('style');
-  style.textContent = `
-    @keyframes spin {
-      to {
-        transform: rotate(360deg);
-      }
-    }
-  `;
+  style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
   document.head.appendChild(style);
 }
