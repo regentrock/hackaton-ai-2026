@@ -5,15 +5,29 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import styles from './AuthForms.module.css';
 
+interface AuthError {
+  message: string;
+}
+
+interface FormData {
+  email: string;
+  password: string;
+  name: string;
+  location: string;
+  availability: string;
+  description: string;
+  skills: string[];
+}
+
 export default function RegisterForm() {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     email: '',
     password: '',
     name: '',
     location: '',
     availability: '',
     description: '',
-    skills: [] as string[]
+    skills: []
   });
   const [skillInput, setSkillInput] = useState('');
   const [error, setError] = useState('');
@@ -53,8 +67,9 @@ export default function RegisterForm() {
     try {
       await register(formData);
       router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const authError = err as AuthError;
+      setError(authError.message || 'Erro ao fazer cadastro');
     } finally {
       setLoading(false);
     }
@@ -62,7 +77,7 @@ export default function RegisterForm() {
 
   return (
     <form onSubmit={handleSubmit} className={styles.container}>
-      <h2 className={styles.title}>Crie sua conta</h2>
+      <h2 className={styles.title}>Crie sua conta 🚀</h2>
       <p className={styles.subtitle}>
         Junte-se a milhares de voluntários e comece a fazer a diferença hoje mesmo
       </p>

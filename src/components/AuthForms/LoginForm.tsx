@@ -5,6 +5,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import styles from './AuthForms.module.css';
 
+interface AuthError {
+  message: string;
+}
+
 export default function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,8 +25,9 @@ export default function LoginForm() {
     try {
       await login(email, password);
       router.push('/dashboard');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const authError = err as AuthError;
+      setError(authError.message || 'Erro ao fazer login');
     } finally {
       setLoading(false);
     }
@@ -30,7 +35,7 @@ export default function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit} className={styles.container}>
-      <h2 className={styles.title}>Bem-vindo de volta!</h2>
+      <h2 className={styles.title}>Bem-vindo de volta! 👋</h2>
       <p className={styles.subtitle}>
         Faça login para continuar sua jornada de voluntariado
       </p>

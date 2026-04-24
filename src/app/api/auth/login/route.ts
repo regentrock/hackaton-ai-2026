@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     const token = generateToken(volunteer.id, volunteer.email);
 
     // Remover passwordHash do retorno
-    const { passwordHash, ...userWithoutPassword } = volunteer;
+    const { passwordHash: _passwordHash, ...userWithoutPassword } = volunteer;
 
     // Criar resposta
     const response = NextResponse.json(

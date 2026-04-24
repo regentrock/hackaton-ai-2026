@@ -20,10 +20,17 @@ export function generateToken(userId: string, email: string): string {
   );
 }
 
-export function verifyToken(token: string): any {
+interface TokenPayload {
+  userId: string;
+  email: string;
+  iat: number;
+  exp: number;
+}
+
+export function verifyToken(token: string): TokenPayload | null {
   try {
-    return jwt.verify(token, JWT_SECRET);
-  } catch (error) {
+    return jwt.verify(token, JWT_SECRET) as TokenPayload;
+  } catch {
     return null;
   }
 }
