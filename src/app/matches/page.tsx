@@ -16,6 +16,7 @@ interface Match {
   matchedSkills: string[];
   missingSkills: string[];
   recommendation: string;
+  priority: 'high' | 'medium' | 'low';
   projectLink?: string;
   theme?: string;
 }
@@ -73,6 +74,10 @@ export default function MatchesPage() {
     }
   }
 
+  const highPriorityMatches = matches.filter(m => m.priority === 'high');
+  const mediumPriorityMatches = matches.filter(m => m.priority === 'medium');
+  const lowPriorityMatches = matches.filter(m => m.priority === 'low');
+
   if (authLoading || loading) {
     return (
       <div style={styles.loadingContainer}>
@@ -123,75 +128,107 @@ export default function MatchesPage() {
       
       {matches.length === 0 ? (
         <div style={styles.emptyCard}>
-          <p>Nenhuma oportunidade encontrada no momento.</p>
-          <p>Tente atualizar seu perfil com mais habilidades.</p>
+          <p>Nenhuma oportunidade encontrada para suas habilidades.</p>
+          <p>Tente adicionar mais habilidades ao seu perfil.</p>
           <button onClick={() => router.push('/dashboard')} style={styles.updateButton}>
             Atualizar Perfil
           </button>
         </div>
       ) : (
-        <div style={styles.grid}>
-          {matches.map((match) => (
-            <div key={match.id} style={styles.card}>
-              <div style={styles.cardHeader}>
-                <h2 style={styles.cardTitle}>{match.title}</h2>
-                <div style={styles.matchScoreBadge(match.score)}>
-                  {match.score}% match
-                </div>
+        <>
+          {/* Recomendações Prioritárias */}
+          {highPriorityMatches.length > 0 && (
+            <div style={styles.section}>
+              <h2 style={styles.sectionTitle}>🎯 Recomendações Prioritárias</h2>
+              <div style={styles.grid}>
+                {highPriorityMatches.map((match) => (
+                  <MatchCard key={match.id} match={match} />
+                ))}
               </div>
-              
-              <p style={styles.orgName}>🏢 {match.organization}</p>
-              <p style={styles.location}>📍 {match.location}</p>
-              {match.theme && (
-                <p style={styles.theme}>🎯 Tema: {match.theme}</p>
-              )}
-              <p style={styles.description}>{match.description?.substring(0, 200)}...</p>
-              
-              {match.matchedSkills && match.matchedSkills.length > 0 && (
-                <div style={styles.matchedSkillsSection}>
-                  <strong>✅ Suas habilidades que combinam:</strong>
-                  <div style={styles.skillsList}>
-                    {match.matchedSkills.map((skill, i) => (
-                      <span key={i} style={styles.matchedSkillTag}>{skill}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              {match.missingSkills && match.missingSkills.length > 0 && (
-                <div style={styles.missingSkillsSection}>
-                  <strong>📚 Habilidades para desenvolver:</strong>
-                  <div style={styles.skillsList}>
-                    {match.missingSkills.map((skill, i) => (
-                      <span key={i} style={styles.missingSkillTag}>{skill}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-              
-              <div style={styles.reasoningSection}>
-                <strong>💡 Análise do Match:</strong>
-                <p style={styles.reasoning}>{match.reasoning}</p>
-              </div>
-              
-              <div style={styles.recommendationSection}>
-                <strong>🎯 Recomendação:</strong>
-                <p style={styles.recommendation}>{match.recommendation}</p>
-              </div>
-              
-              {match.projectLink && (
-                <a href={match.projectLink} target="_blank" rel="noopener noreferrer" style={styles.linkButton}>
-                  🔗 Ver Projeto Original
-                </a>
-              )}
-              
-              <a href={`mailto:voluntarios@globalgiving.org`} style={styles.contactButton}>
-                📧 Tenho Interesse
-              </a>
             </div>
-          ))}
+          )}
+          
+          {/* Outras Recomendações */}
+          {mediumPriorityMatches.length > 0 && (
+            <div style={styles.section}>
+              <h2 style={styles.sectionTitle}>👍 Boas Oportunidades</h2>
+              <div style={styles.grid}>
+                {mediumPriorityMatches.map((match) => (
+                  <MatchCard key={match.id} match={match} />
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {/* Oportunidades para Desenvolvimento */}
+          {lowPriorityMatches.length > 0 && (
+            <div style={styles.section}>
+              <h2 style={styles.sectionTitle}>📚 Oportunidades para Desenvolver Novas Habilidades</h2>
+              <div style={styles.grid}>
+                {lowPriorityMatches.map((match) => (
+                  <MatchCard key={match.id} match={match} />
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function MatchCard({ match }: { match: Match }) {
+  return (
+    <div style={styles.card}>
+      <div style={styles.cardHeader}>
+        <h2 style={styles.cardTitle}>{match.title}</h2>
+        <div style={styles.matchScoreBadge(match.score)}>
+          {match.score}% match
+        </div>
+      </div>
+      
+      <p style={styles.orgName}>🏢 {match.organization}</p>
+      <p style={styles.location}>📍 {match.location}</p>
+      {match.theme && (
+        <p style={styles.theme}>🎯 Tema: {match.theme}</p>
+      )}
+      <p style={styles.description}>{match.description?.substring(0, 200)}...</p>
+      
+      {match.matchedSkills && match.matchedSkills.length > 0 && (
+        <div style={styles.matchedSkillsSection}>
+          <strong>✅ Suas habilidades que combinam:</strong>
+          <div style={styles.skillsList}>
+            {match.matchedSkills.map((skill, i) => (
+              <span key={i} style={styles.matchedSkillTag}>{skill}</span>
+            ))}
+          </div>
         </div>
       )}
+      
+      {match.missingSkills && match.missingSkills.length > 0 && (
+        <div style={styles.missingSkillsSection}>
+          <strong>📚 Habilidades para desenvolver:</strong>
+          <div style={styles.skillsList}>
+            {match.missingSkills.map((skill, i) => (
+              <span key={i} style={styles.missingSkillTag}>{skill}</span>
+            ))}
+          </div>
+        </div>
+      )}
+      
+      <div style={styles.reasoningSection}>
+        <strong>💡 Análise do Match:</strong>
+        <p style={styles.reasoning}>{match.reasoning}</p>
+      </div>
+      
+      <div style={styles.recommendationSection}>
+        <strong>🎯 Recomendação:</strong>
+        <p style={styles.recommendation}>{match.recommendation}</p>
+      </div>
+      
+      <a href={`mailto:voluntarios@globalgiving.org?subject=Interesse no projeto: ${match.title}`} style={styles.contactButton}>
+        📧 Tenho Interesse
+      </a>
     </div>
   );
 }
@@ -227,6 +264,14 @@ const styles: { [key: string]: any } = {
     fontSize: '0.875rem',
     color: '#6b7280',
     marginTop: '0.5rem',
+  },
+  section: {
+    marginBottom: '2rem',
+  },
+  sectionTitle: {
+    fontSize: '1.5rem',
+    marginBottom: '1rem',
+    color: '#374151',
   },
   userSkillsCard: {
     backgroundColor: '#e0e7ff',
@@ -274,8 +319,8 @@ const styles: { [key: string]: any } = {
     flex: 1,
   },
   matchScoreBadge: (score: number) => ({
-    backgroundColor: score >= 80 ? '#dcfce7' : score >= 60 ? '#fef3c7' : '#fee2e2',
-    color: score >= 80 ? '#166534' : score >= 60 ? '#92400e' : '#991b1b',
+    backgroundColor: score >= 75 ? '#dcfce7' : score >= 50 ? '#fef3c7' : '#fee2e2',
+    color: score >= 75 ? '#166534' : score >= 50 ? '#92400e' : '#991b1b',
     padding: '0.25rem 0.75rem',
     borderRadius: '20px',
     fontSize: '0.75rem',
@@ -356,17 +401,6 @@ const styles: { [key: string]: any } = {
     marginTop: '0.25rem',
     marginBottom: 0,
     fontWeight: '500' as const,
-  },
-  linkButton: {
-    display: 'block',
-    textAlign: 'center' as const,
-    backgroundColor: '#4b5563',
-    color: 'white',
-    padding: '0.5rem 1rem',
-    borderRadius: '8px',
-    textDecoration: 'none',
-    fontSize: '0.875rem',
-    marginTop: '0.75rem',
   },
   contactButton: {
     display: 'block',

@@ -23,6 +23,7 @@ interface MatchResult {
   matchedSkills: string[];
   missingSkills: string[];
   recommendation: string;
+  priority: 'high' | 'medium' | 'low';
 }
 
 export class MatchService {
@@ -32,7 +33,6 @@ export class MatchService {
   constructor() {}
 
   private async getAccessToken(): Promise<string> {
-    // Se o token ainda é válido (por 50 minutos)
     if (this.accessToken && Date.now() < this.tokenExpiry) {
       return this.accessToken;
     }
@@ -58,7 +58,7 @@ export class MatchService {
 
     const data = await response.json();
     this.accessToken = data.access_token;
-    this.tokenExpiry = Date.now() + 50 * 60 * 1000; // 50 minutos
+    this.tokenExpiry = Date.now() + 50 * 60 * 1000;
 
     if (!this.accessToken) {
       throw new Error('No access token received from IBM');
@@ -76,48 +76,130 @@ export class MatchService {
       return [];
     }
 
+    // =========================
+    // PRÉ-FILTRO INTELIGENTE BASEADO EM SKILLS
+    // =========================
+    const filteredProjects = this.smartPreFilter(user, projects);
+    
+    console.log(`📊 Pré-filtro: ${projects.length} -> ${filteredProjects.length} projetos`);
+    console.log(`🎯 Skills do usuário: ${user.skills.join(', ')}`);
+    
+    if (filteredProjects.length === 0) {
+      console.log('⚠️ Nenhum projeto passou no pré-filtro, usando fallback');
+      return this.fallbackMatch(user, projects, limit);
+    }
+
     // Se não tiver WatsonX configurado, usar fallback
     if (!process.env.IBM_API_KEY || !process.env.IBM_URL || !process.env.IBM_PROJECT_ID) {
       console.log('WatsonX not configured, using fallback matching');
-      return this.fallbackMatch(user, projects, limit);
+      return this.fallbackMatch(user, filteredProjects, limit);
     }
 
     try {
       const accessToken = await this.getAccessToken();
       
-      // Processar em lotes para evitar sobrecarga
-      const batchSize = 5;
+      // Processar apenas os projetos pré-filtrados
+      const batchSize = 3; // Menor batch para análise mais detalhada
       const results: MatchResult[] = [];
       
-      for (let i = 0; i < projects.length; i += batchSize) {
-        const batch = projects.slice(i, i + batchSize);
+      for (let i = 0; i < filteredProjects.length; i += batchSize) {
+        const batch = filteredProjects.slice(i, i + batchSize);
         const batchResults = await Promise.all(
-          batch.map(project => this.analyzeMatchWithAI(user, project, accessToken))
+          batch.map(project => this.deepAnalyzeMatch(user, project, accessToken))
         );
         results.push(...batchResults);
         
-        // Pequena pausa entre lotes
-        if (i + batchSize < projects.length) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+        // Pausa entre lotes
+        if (i + batchSize < filteredProjects.length) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
       }
       
-      // Ordenar por score e limitar
+      // Ordenar por score
       results.sort((a, b) => b.score - a.score);
       return results.slice(0, limit);
       
     } catch (error) {
       console.error('WatsonX match error:', error);
-      return this.fallbackMatch(user, projects, limit);
+      return this.fallbackMatch(user, filteredProjects, limit);
     }
   }
 
-  private async analyzeMatchWithAI(
+  /**
+   * PRÉ-FILTRO INTELIGENTE - Reduz projetos baseado nas skills do usuário
+   */
+  private smartPreFilter(user: UserProfile, projects: Project[]): Project[] {
+    const userSkills = user.skills.map(s => s.toLowerCase());
+    
+    // Se não tem skills, retorna todos
+    if (userSkills.length === 0) {
+      return projects;
+    }
+    
+    // Calcular score de relevância para cada projeto
+    const scoredProjects = projects.map(project => {
+      const projectSkills = project.skills.map(s => s.toLowerCase());
+      const projectText = `${project.title} ${project.description} ${project.theme}`.toLowerCase();
+      
+      let relevanceScore = 0;
+      const matchedSkills: string[] = [];
+      
+      // 1. Match direto de skills (peso 3)
+      for (const userSkill of userSkills) {
+        for (const projectSkill of projectSkills) {
+          if (userSkill.includes(projectSkill) || projectSkill.includes(userSkill)) {
+            relevanceScore += 3;
+            matchedSkills.push(projectSkill);
+            break;
+          }
+        }
+      }
+      
+      // 2. Skills mencionadas na descrição (peso 2)
+      for (const userSkill of userSkills) {
+        if (projectText.includes(userSkill)) {
+          relevanceScore += 2;
+        }
+      }
+      
+      // 3. Bônus por tema relacionado (peso 1)
+      const themeMatch = project.theme?.toLowerCase() || '';
+      for (const userSkill of userSkills) {
+        if (themeMatch.includes(userSkill)) {
+          relevanceScore += 1;
+        }
+      }
+      
+      return { project, relevanceScore, matchedSkillsCount: matchedSkills.length };
+    });
+    
+    // Filtrar apenas projetos com score > 0 OR pelo menos 1 skill match
+    let filtered = scoredProjects.filter(p => p.relevanceScore > 0);
+    
+    // Se muito restritivo, expandir um pouco
+    if (filtered.length < 3 && projects.length > 0) {
+      console.log('Expandindo filtro - poucos projetos encontrados');
+      filtered = scoredProjects.slice(0, Math.min(10, projects.length));
+    }
+    
+    // Se ainda assim não tem projetos, pegar os primeiros 10
+    if (filtered.length === 0 && projects.length > 0) {
+      filtered = scoredProjects.slice(0, Math.min(10, projects.length));
+    }
+    
+    return filtered.map(f => f.project);
+  }
+
+  /**
+   * ANÁLISE DETALHADA COM WATSONX
+   */
+  private async deepAnalyzeMatch(
     user: UserProfile,
     project: Project,
     accessToken: string
   ): Promise<MatchResult> {
-    const prompt = this.buildMatchPrompt(user, project);
+    // Prompt mais detalhado e específico
+    const prompt = this.buildDetailedPrompt(user, project);
     
     const response = await fetch(`${process.env.IBM_URL}/ml/v1/text/generation?version=2023-05-29`, {
       method: 'POST',
@@ -131,10 +213,9 @@ export class MatchService {
         project_id: process.env.IBM_PROJECT_ID,
         parameters: {
           decoding_method: "greedy",
-          max_new_tokens: 300,
+          max_new_tokens: 400,
           temperature: 0.1,
-          min_new_tokens: 50,
-          repetition_penalty: 1.0,
+          min_new_tokens: 80,
         },
       }),
     });
@@ -149,138 +230,205 @@ export class MatchService {
       throw new Error('Invalid response from WatsonX');
     }
 
-    const result = this.parseAIResponse(data.results[0].generated_text, project);
-    return result;
+    return this.parseDetailedResponse(data.results[0].generated_text, project, user);
   }
 
-  private buildMatchPrompt(user: UserProfile, project: Project): string {
-    return `You are an expert volunteer matching system. Analyze the match between a volunteer and a project.
+  /**
+   * PROMPT DETALHADO PARA ANÁLISE PROFUNDA
+   */
+  private buildDetailedPrompt(user: UserProfile, project: Project): string {
+    return `You are an expert volunteer-job matching AI. Analyze this specific match in detail.
 
-VOLUNTEER PROFILE:
-- Name: ${user.name}
-- Skills: ${user.skills.join(', ')}
-- Location: ${user.location}
-- About: ${user.description || 'Volunteer interested in helping'}
-- Availability: ${user.availability || 'Flexible'}
+=== VOLUNTEER PROFILE ===
+Name: ${user.name}
+Technical Skills: ${user.skills.join(', ')}
+Location: ${user.location}
+Availability: ${user.availability || 'Flexible'}
+Bio: ${user.description || 'Volunteer'}
 
-PROJECT DETAILS:
-- Title: ${project.title}
-- Organization: ${project.organization}
-- Theme: ${project.theme || 'Social Impact'}
-- Description: ${project.description.substring(0, 500)}
-- Location: ${project.location}
-- Required Skills: ${project.skills.join(', ')}
+=== OPPORTUNITY DETAILS ===
+Organization: ${project.organization}
+Project: ${project.title}
+Theme: ${project.theme || 'Social Impact'}
+Location: ${project.location}
+Required Skills: ${project.skills.join(', ')}
+Description: ${project.description.substring(0, 800)}
 
-ANALYSIS TASKS:
-1. Identify specific skills from the volunteer that match the project's needs
-2. Identify skills the volunteer should develop to improve match
-3. Provide a match score from 0 to 100 (higher = better match)
-4. Explain the reasoning in Portuguese
+=== YOUR TASK ===
+Analyze ONLY this specific opportunity against this specific volunteer.
 
-OUTPUT FORMAT (JSON):
+First, identify which of the volunteer's skills are RELEVANT to this opportunity:
+- List EXACT skills from volunteer that match
+- Be specific, don't generalize
+
+Second, identify gaps:
+- What skills is the volunteer missing?
+
+Third, calculate match score (0-100):
+- 90-100: Perfect fit, multiple skills match
+- 70-89: Good fit, several skills match
+- 50-69: Fair fit, some skills match
+- 30-49: Poor fit, few skills match
+- 0-29: Very poor fit, no skills match
+
+Fourth, provide a personalized recommendation in Portuguese.
+
+=== OUTPUT FORMAT (JSON ONLY) ===
 {
   "score": number,
-  "reasoning": "string explaining why this is a good/poor match",
+  "reasoning": "Detailed explanation of why this specific volunteer matches this opportunity",
   "matchedSkills": ["skill1", "skill2"],
   "missingSkills": ["skill1", "skill2"],
-  "recommendation": "string with specific advice in Portuguese"
+  "recommendation": "Personalized advice for this volunteer about this opportunity (in Portuguese)"
 }
 
 CRITICAL: Return ONLY valid JSON, no other text.`;
   }
 
-  private parseAIResponse(aiText: string, project: Project): MatchResult {
+  private parseDetailedResponse(aiText: string, project: Project, user: UserProfile): MatchResult {
     try {
-      // Limpar a resposta
       let cleanText = aiText.replace(/```json\n?/g, '');
       cleanText = cleanText.replace(/```\n?/g, '');
       cleanText = cleanText.trim();
       
-      // Encontrar JSON
       const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
-        throw new Error('No JSON found in AI response');
+        throw new Error('No JSON found');
       }
       
       const parsed = JSON.parse(jsonMatch[0]);
       
+      // Garantir que matchedSkills são realmente das skills do usuário
+      const validMatchedSkills = (parsed.matchedSkills || []).filter((skill: string) =>
+        user.skills.some(us => 
+          us.toLowerCase().includes(skill.toLowerCase()) || 
+          skill.toLowerCase().includes(us.toLowerCase())
+        )
+      );
+      
+      const score = Math.min(100, Math.max(0, parsed.score || this.calculateBaseScore(user, project)));
+      
+      // Determinar prioridade baseada no score
+      let priority: 'high' | 'medium' | 'low' = 'medium';
+      if (score >= 75) priority = 'high';
+      else if (score >= 50) priority = 'medium';
+      else priority = 'low';
+      
       return {
         projectId: project.id,
-        score: Math.min(100, Math.max(0, parsed.score || 50)),
-        reasoning: parsed.reasoning || this.generateDefaultReasoning(project),
-        matchedSkills: parsed.matchedSkills || [],
-        missingSkills: parsed.missingSkills || [],
-        recommendation: parsed.recommendation || "Considere se candidatar a esta oportunidade!"
+        score: score,
+        reasoning: parsed.reasoning || this.generateReasoning(project, validMatchedSkills),
+        matchedSkills: validMatchedSkills.slice(0, 4),
+        missingSkills: (parsed.missingSkills || []).slice(0, 3),
+        recommendation: parsed.recommendation || this.generateRecommendation(score, validMatchedSkills),
+        priority
       };
       
     } catch (error) {
       console.error('Error parsing AI response:', error);
-      return this.createFallbackResult(project);
+      return this.createDetailedFallback(project, user);
     }
+  }
+
+  private calculateBaseScore(user: UserProfile, project: Project): number {
+    const userSkills = user.skills.map(s => s.toLowerCase());
+    const projectSkills = project.skills.map(s => s.toLowerCase());
+    
+    if (userSkills.length === 0) return 40;
+    if (projectSkills.length === 0) return 45;
+    
+    let matches = 0;
+    for (const userSkill of userSkills) {
+      for (const projSkill of projectSkills) {
+        if (userSkill.includes(projSkill) || projSkill.includes(userSkill)) {
+          matches++;
+          break;
+        }
+      }
+    }
+    
+    const score = (matches / projectSkills.length) * 100;
+    return Math.min(100, Math.max(20, Math.floor(score)));
+  }
+
+  private generateReasoning(project: Project, matchedSkills: string[]): string {
+    if (matchedSkills.length > 0) {
+      return `Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são relevantes para o projeto "${project.title}". Esta é uma oportunidade na área de ${project.theme || 'impacto social'}.`;
+    }
+    return `O projeto "${project.title}" da ${project.organization} busca voluntários. Uma oportunidade para desenvolver novas habilidades.`;
+  }
+
+  private generateRecommendation(score: number, matchedSkills: string[]): string {
+    if (score >= 75) {
+      return "🎯 Excelente! Este projeto está muito alinhado com seu perfil. Recomendamos fortemente que você se candidate!";
+    } else if (score >= 50) {
+      if (matchedSkills.length > 0) {
+        return `👍 Bom potencial! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são valiosas. Candidate-se para ganhar experiência.`;
+      }
+      return "👍 Oportunidade interessante para expandir seu impacto social. Considere se candidatar!";
+    } else {
+      return "📚 Uma chance de aprender e contribuir em uma nova área. Mesmo sem experiência direta, você pode fazer a diferença.";
+    }
+  }
+
+  private createDetailedFallback(project: Project, user: UserProfile): MatchResult {
+    const score = this.calculateBaseScore(user, project);
+    const userSkills = user.skills.map(s => s.toLowerCase());
+    const projectSkills = project.skills.map(s => s.toLowerCase());
+    
+    const matchedSkills = projectSkills.filter(ps =>
+      userSkills.some(us => us.includes(ps) || ps.includes(us))
+    );
+    
+    let priority: 'high' | 'medium' | 'low' = 'medium';
+    if (score >= 75) priority = 'high';
+    else if (score >= 50) priority = 'medium';
+    else priority = 'low';
+    
+    return {
+      projectId: project.id,
+      score,
+      reasoning: this.generateReasoning(project, matchedSkills),
+      matchedSkills: matchedSkills.slice(0, 4),
+      missingSkills: [],
+      recommendation: this.generateRecommendation(score, matchedSkills),
+      priority
+    };
   }
 
   private fallbackMatch(user: UserProfile, projects: Project[], limit: number): MatchResult[] {
     const results: MatchResult[] = [];
     
     for (const project of projects) {
-      const userSkillsLower = user.skills.map(s => s.toLowerCase());
-      const projectSkillsLower = project.skills.map(s => s.toLowerCase());
+      const score = this.calculateBaseScore(user, project);
+      const userSkills = user.skills.map(s => s.toLowerCase());
+      const projectSkills = project.skills.map(s => s.toLowerCase());
       
-      // Calcular match de habilidades
-      const matchedSkills: string[] = [];
-      const missingSkills: string[] = [];
+      const matchedSkills = projectSkills.filter(ps =>
+        userSkills.some(us => us.includes(ps) || ps.includes(us))
+      );
       
-      for (const projectSkill of projectSkillsLower) {
-        let matched = false;
-        for (const userSkill of userSkillsLower) {
-          if (userSkill.includes(projectSkill) || projectSkill.includes(userSkill)) {
-            matched = true;
-            matchedSkills.push(projectSkill);
-            break;
-          }
-        }
-        if (!matched) {
-          missingSkills.push(projectSkill);
-        }
-      }
+      const missingSkills = projectSkills.filter(ps =>
+        !matchedSkills.some(ms => ms === ps)
+      );
       
-      const score = userSkillsLower.length > 0 
-        ? (matchedSkills.length / projectSkillsLower.length) * 100
-        : 50;
+      let priority: 'high' | 'medium' | 'low' = 'medium';
+      if (score >= 75) priority = 'high';
+      else if (score >= 50) priority = 'medium';
+      else priority = 'low';
       
       results.push({
         projectId: project.id,
-        score: Math.min(100, Math.max(0, Math.floor(score))),
-        reasoning: this.generateDefaultReasoning(project),
-        matchedSkills: matchedSkills.slice(0, 3),
+        score,
+        reasoning: this.generateReasoning(project, matchedSkills),
+        matchedSkills: matchedSkills.slice(0, 4),
         missingSkills: missingSkills.slice(0, 3),
-        recommendation: this.generateDefaultRecommendation(matchedSkills)
+        recommendation: this.generateRecommendation(score, matchedSkills),
+        priority
       });
     }
     
     results.sort((a, b) => b.score - a.score);
     return results.slice(0, limit);
-  }
-
-  private createFallbackResult(project: Project): MatchResult {
-    return {
-      projectId: project.id,
-      score: 50,
-      reasoning: "Projeto interessante baseado na sua localização.",
-      matchedSkills: [],
-      missingSkills: [],
-      recommendation: "Recomendamos avaliar este projeto!"
-    };
-  }
-
-  private generateDefaultReasoning(project: Project): string {
-    return `Projeto: ${project.title} da organização ${project.organization}. Uma oportunidade na área de ${project.theme || 'impacto social'}.`;
-  }
-
-  private generateDefaultRecommendation(matchedSkills: string[]): string {
-    if (matchedSkills.length > 0) {
-      return `Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são relevantes. Candidate-se!`;
-    }
-    return "Considere desenvolver habilidades específicas para melhorar seu match.";
   }
 }
