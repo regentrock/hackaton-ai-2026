@@ -1,5 +1,3 @@
-// src/app/api/match/route.ts
-
 export async function GET() {
   try {
     // =========================
@@ -10,8 +8,6 @@ export async function GET() {
     );
     const user = await userRes.json();
 
-    console.log("USER:", user);
-
     // =========================
     // 2. Buscar oportunidades
     // =========================
@@ -20,10 +16,8 @@ export async function GET() {
     );
     const oppData = await oppRes.json();
 
-    console.log("OPPORTUNITIES:", oppData);
-
     // =========================
-    // 3. Gerar IAM TOKEN
+    // 3. Gerar IAM token
     // =========================
     const iamRes = await fetch(
       "https://iam.cloud.ibm.com/identity/token",
@@ -37,19 +31,15 @@ export async function GET() {
     );
 
     const iamData = await iamRes.json();
-    console.log("IAM RESPONSE:", iamData);
 
     if (!iamData.access_token) {
-      return Response.json(
-        { error: "Failed to generate IAM token", details: iamData },
-        { status: 500 }
-      );
+      return Response.json({ error: iamData }, { status: 500 });
     }
 
     const accessToken = iamData.access_token;
 
     // =========================
-    // 4. Prompt
+    // 4. Prompt (melhorado)
     // =========================
     const prompt = `
 You are an AI that matches volunteers with opportunities.
@@ -60,7 +50,13 @@ ${JSON.stringify(user)}
 Opportunities:
 ${JSON.stringify(oppData.opportunities)}
 
-Return ONLY valid JSON (no text before or after):
+Rules:
+- Match based on skills first
+- Then consider location proximity
+- Return ONLY valid JSON
+- Max 5 results
+
+Format:
 [
   {
     "title": "...",
@@ -71,7 +67,7 @@ Return ONLY valid JSON (no text before or after):
 `;
 
     // =========================
-    // 5. Chamar WatsonX
+    // 5. WatsonX
     // =========================
     const watsonRes = await fetch(
       `${process.env.IBM_URL}/ml/v1/text/generation?version=2023-05-29`,
@@ -88,36 +84,35 @@ Return ONLY valid JSON (no text before or after):
           parameters: {
             decoding_method: "greedy",
             max_new_tokens: 300,
+            temperature: 0.3,
           },
         }),
       }
     );
 
-    const watsonData = await watsonRes.json();
-    console.log("WATSON RESPONSE:", watsonData);
+    const data = await watsonRes.json();
 
-    if (!watsonData.results || !watsonData.results[0]) {
+    if (!data.results || !data.results[0]) {
       return Response.json(
-        { error: "Invalid AI response", details: watsonData },
+        { error: "Invalid AI response", details: data },
         { status: 500 }
       );
     }
 
-    const text = watsonData.results[0].generated_text;
+    const text = data.results[0].generated_text;
 
-    // =========================
-    // 6. Retornar JSON
-    // =========================
     return new Response(text, {
       headers: { "Content-Type": "application/json" },
     });
 
   } catch (error: any) {
-    console.error("FULL ERROR:", error);
+    console.error(error);
 
     return Response.json(
-      { error: error.message || "unknown error" },
+      { error: error.message },
       { status: 500 }
     );
   }
 }
+
+console.log("API KEY:", process.env.IBM_API_KEY);
