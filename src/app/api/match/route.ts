@@ -1,11 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/src/lib/auth/authUtils';
 
-// URL base - usar variável de ambiente ou fallback
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 
-                 process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 
-                 'http://localhost:3000';
-
 export async function GET(request: NextRequest) {
   try {
     console.log('=== MATCH API CALLED ===');
@@ -33,7 +28,7 @@ export async function GET(request: NextRequest) {
     console.log('✅ Token found');
 
     // =========================
-    // 1. Validar token e buscar usuário
+    // 1. Validar token
     // =========================
     const decoded = verifyToken(token);
     
@@ -47,43 +42,36 @@ export async function GET(request: NextRequest) {
 
     console.log('✅ Token decoded, userId:', decoded.userId);
 
-    // Buscar usuário - chamada interna (mesmo servidor)
-    const userProfileUrl = `${BASE_URL}/api/user-profile`;
-    console.log('Fetching user from:', userProfileUrl);
+    // =========================
+    // 2. Buscar usuário DIRETAMENTE (sem chamar outra API)
+    // =========================
+    const { prisma } = await import('@/src/lib/prisma');
     
-    const userRes = await fetch(userProfileUrl, {
-      headers: {
-        'Cookie': `auth_token=${token}`,
-        'Authorization': `Bearer ${token}`,
-      },
-      cache: 'no-store'
+    const user = await prisma.volunteer.findUnique({
+      where: { id: decoded.userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        location: true,
+        availability: true,
+        description: true,
+        skills: true,
+        createdAt: true
+      }
     });
 
-    const userData = await userRes.json();
-    console.log('User profile response status:', userRes.status);
-    console.log('User profile response:', JSON.stringify(userData, null, 2));
-
-    if (!userRes.ok || userData.error) {
-      console.error('Erro ao buscar usuário:', userData);
-      return NextResponse.json(
-        { error: "Failed to fetch user", details: userData },
-        { status: 500 }
-      );
-    }
-
-    const user = userData.user;
-
     if (!user) {
-      console.log('❌ User not found in response');
+      console.log('❌ User not found:', decoded.userId);
       return NextResponse.json(
-        { error: "User not found" },
+        { error: "Usuário não encontrado" },
         { status: 404 }
       );
     }
 
     console.log('✅ User found:', user.name, 'Location:', user.location);
 
-    if (!user.location || user.location === 'Não informada') {
+    if (!user.location || user.location === 'Não informada' || user.location === '') {
       console.log('❌ User location not set');
       return NextResponse.json(
         { error: "Localização do usuário não informada. Atualize seu perfil." },
@@ -92,18 +80,39 @@ export async function GET(request: NextRequest) {
     }
 
     // =========================
-    // 2. Buscar oportunidades
+    // 3. Buscar oportunidades (via fetch interno)
     // =========================
-    const opportunitiesUrl = `${BASE_URL}/api/opportunities?city=${encodeURIComponent(user.location)}`;
+    // Construir URL absoluta para a API de oportunidades
+    const protocol = request.headers.get('x-forwarded-proto') || 'https';
+    const host = request.headers.get('host');
+    const baseUrl = `${protocol}://${host}`;
+    
+    const opportunitiesUrl = `${baseUrl}/api/opportunities?city=${encodeURIComponent(user.location)}`;
     console.log('Fetching opportunities from:', opportunitiesUrl);
     
-    const oppRes = await fetch(opportunitiesUrl, { cache: 'no-store' });
-    const oppData = await oppRes.json();
+    const oppRes = await fetch(opportunitiesUrl, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      cache: 'no-store'
+    });
 
-    if (!oppRes.ok || !oppData || !oppData.opportunities) {
-      console.error('Erro ao buscar oportunidades:', oppData);
+    if (!oppRes.ok) {
+      console.error('Erro ao buscar oportunidades, status:', oppRes.status);
+      const errorText = await oppRes.text();
+      console.error('Error response:', errorText);
       return NextResponse.json(
         { error: "Failed to fetch opportunities" },
+        { status: 500 }
+      );
+    }
+
+    const oppData = await oppRes.json();
+
+    if (!oppData || !oppData.opportunities) {
+      console.error('Invalid opportunities data:', oppData);
+      return NextResponse.json(
+        { error: "Invalid opportunities data" },
         { status: 500 }
       );
     }
@@ -111,23 +120,37 @@ export async function GET(request: NextRequest) {
     console.log(`✅ Found ${oppData.opportunities.length} opportunities`);
 
     // =========================
-    // 3. Gerar IAM token (se necessário para WatsonX)
+    // 4. Processar match (filtro simples)
     // =========================
-    // Se você está usando WatsonX, mantenha o código
-    // Se não, pule esta parte
+    // Filtrar oportunidades por habilidades do usuário
+    const userSkills = user.skills.map(s => s.toLowerCase());
+    
+    const matchedOpportunities = oppData.opportunities
+      .filter((opp: any) => {
+        // Verificar se alguma habilidade do usuário corresponde à oportunidade
+        const oppSkills = opp.skills?.map((s: string) => s.toLowerCase()) || [];
+        return userSkills.some(skill => oppSkills.includes(skill));
+      })
+      .slice(0, 5)
+      .map((opp: any) => ({
+        title: opp.title,
+        organization: opp.organization || 'Organização',
+        location: opp.location,
+        reason: `Match baseado nas suas habilidades: ${user.skills.join(', ')}`
+      }));
 
-    // =========================
-    // 4. Processar match (exemplo sem IA por enquanto)
-    // =========================
-    // Por enquanto, retornar oportunidades sem IA para testar
-    const matchedOpportunities = oppData.opportunities.slice(0, 5).map((opp: any) => ({
-      title: opp.title,
-      organization: opp.organization || 'Organização',
-      location: opp.location,
-      reason: `Match baseado na sua localização: ${user.location}`
-    }));
+    // Se não houver matches por habilidades, retornar baseado na localização
+    let results = matchedOpportunities;
+    if (results.length === 0) {
+      results = oppData.opportunities.slice(0, 5).map((opp: any) => ({
+        title: opp.title,
+        organization: opp.organization || 'Organização',
+        location: opp.location,
+        reason: `Match baseado na sua localização: ${user.location}`
+      }));
+    }
 
-    return NextResponse.json(matchedOpportunities);
+    return NextResponse.json(results);
 
   } catch (error: any) {
     console.error("❌ MATCH ERROR:", error);
