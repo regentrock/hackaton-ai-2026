@@ -4,6 +4,49 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
+const styles = {
+  container: {
+    padding: '2rem',
+    maxWidth: '1200px',
+    margin: '0 auto',
+  },
+  header: {
+    fontSize: '2rem',
+    fontWeight: 'bold' as const,
+    marginBottom: '1rem',
+    color: '#333',
+  },
+  card: {
+    background: 'white',
+    padding: '1.5rem',
+    borderRadius: '8px',
+    boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+  },
+  info: {
+    marginBottom: '0.5rem',
+  },
+  label: {
+    fontWeight: 'bold' as const,
+    marginRight: '0.5rem',
+  },
+  button: {
+    marginTop: '1rem',
+    padding: '0.5rem 1rem',
+    backgroundColor: '#dc2626',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+  },
+  loading: {
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    height: '100vh',
+    fontSize: '1.2rem',
+  },
+};
+
 export default function DashboardPage() {
   const { user, loading, logout } = useAuth();
   const router = useRouter();
@@ -15,7 +58,7 @@ export default function DashboardPage() {
   }, [user, loading, router]);
 
   if (loading) {
-    return <div className="flex justify-center items-center h-screen">Carregando...</div>;
+    return <div style={styles.loading}>Carregando...</div>;
   }
 
   if (!user) {
@@ -23,19 +66,16 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="p-8">
-      <h1 className="text-2xl font-bold mb-4">Dashboard</h1>
-      <div className="bg-white p-6 rounded shadow">
-        <h2 className="text-xl mb-4">Bem-vindo, {user.name}!</h2>
-        <p><strong>Email:</strong> {user.email}</p>
-        <p><strong>Localização:</strong> {user.location || 'Não informada'}</p>
-        <p><strong>Disponibilidade:</strong> {user.availability || 'Não informada'}</p>
-        <p><strong>Descrição:</strong> {user.description || 'Não informada'}</p>
-        <p><strong>Habilidades:</strong> {user.skills.join(', ') || 'Nenhuma'}</p>
-        <button
-          onClick={logout}
-          className="mt-4 bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600"
-        >
+    <div style={styles.container}>
+      <h1 style={styles.header}>Dashboard</h1>
+      <div style={styles.card}>
+        <h2 style={{ marginBottom: '1rem' }}>Bem-vindo, {user.name}!</h2>
+        <p style={styles.info}><span style={styles.label}>Email:</span> {user.email}</p>
+        <p style={styles.info}><span style={styles.label}>Localização:</span> {user.location || 'Não informada'}</p>
+        <p style={styles.info}><span style={styles.label}>Disponibilidade:</span> {user.availability || 'Não informada'}</p>
+        <p style={styles.info}><span style={styles.label}>Descrição:</span> {user.description || 'Não informada'}</p>
+        <p style={styles.info}><span style={styles.label}>Habilidades:</span> {user.skills.join(', ') || 'Nenhuma'}</p>
+        <button onClick={logout} style={styles.button}>
           Sair
         </button>
       </div>
