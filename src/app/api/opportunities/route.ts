@@ -1,23 +1,29 @@
 // src/app/api/opportunities/route.ts
 
 export async function GET() {
-  return Response.json({
-    opportunities: [
-      {
-        title: "Community Kitchen Volunteer",
-        location: "São Paulo",
-        skills_required: ["cooking", "kitchen"]
-      },
-      {
-        title: "Food Distribution NGO",
-        location: "Campinas",
-        skills_required: ["logistics", "organization"]
-      },
-      {
-        title: "Shelter Support",
-        location: "São Paulo",
-        skills_required: ["general help"]
-      }
-    ]
-  });
+  try {
+    const res = await fetch(
+      "https://mapaosc.ipea.gov.br/api/osc?limit=20"
+    );
+
+    const data = await res.json();
+
+    // ⚠️ Ajuste dependendo da resposta real da API
+    const opportunities = data.data.map((osc: any) => ({
+      title: osc.nome,
+      location: osc.municipio?.nome || "Unknown",
+      city: osc.municipio?.nome || "Unknown",
+      skills_required: ["general help"], // API não tem isso → você pode enriquecer depois
+    }));
+
+    return Response.json({ opportunities });
+
+  } catch (error) {
+    console.error(error);
+
+    return Response.json(
+      { opportunities: [] },
+      { status: 500 }
+    );
+  }
 }

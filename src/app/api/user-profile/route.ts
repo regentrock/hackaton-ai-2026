@@ -6,8 +6,8 @@ export async function GET() {
   const user = await prisma.volunteer.findFirst(); // TEMPORÁRIO
 
   return Response.json({
-    name: user?.name || "Test User",
+    name: user?.name || "João",
     skills: user?.skills || ["cooking"],
-    location: user?.location || "São Paulo"
+    location: user?.location || "Sumaré"
   });
 }
