@@ -2,19 +2,29 @@
 
 export async function GET() {
   try {
-    // 1. pegar usuário
+    // =========================
+    // 1. Buscar usuário
+    // =========================
     const userRes = await fetch(
       "https://hackaton-ai-2026.vercel.app/api/user-profile"
     );
     const user = await userRes.json();
 
-    // 2. pegar oportunidades
+    console.log("USER:", user);
+
+    // =========================
+    // 2. Buscar oportunidades
+    // =========================
     const oppRes = await fetch(
       "https://hackaton-ai-2026.vercel.app/api/opportunities"
     );
     const oppData = await oppRes.json();
 
-    // 3. gerar IAM token
+    console.log("OPPORTUNITIES:", oppData);
+
+    // =========================
+    // 3. Gerar IAM TOKEN
+    // =========================
     const iamRes = await fetch(
       "https://iam.cloud.ibm.com/identity/token",
       {
@@ -27,9 +37,20 @@ export async function GET() {
     );
 
     const iamData = await iamRes.json();
+    console.log("IAM RESPONSE:", iamData);
+
+    if (!iamData.access_token) {
+      return Response.json(
+        { error: "Failed to generate IAM token", details: iamData },
+        { status: 500 }
+      );
+    }
+
     const accessToken = iamData.access_token;
 
-    // 4. prompt
+    // =========================
+    // 4. Prompt
+    // =========================
     const prompt = `
 You are an AI that matches volunteers with opportunities.
 
@@ -39,7 +60,7 @@ ${JSON.stringify(user)}
 Opportunities:
 ${JSON.stringify(oppData.opportunities)}
 
-Return ONLY valid JSON:
+Return ONLY valid JSON (no text before or after):
 [
   {
     "title": "...",
@@ -49,8 +70,10 @@ Return ONLY valid JSON:
 ]
 `;
 
-    // 5. chamar watsonx
-    const response = await fetch(
+    // =========================
+    // 5. Chamar WatsonX
+    // =========================
+    const watsonRes = await fetch(
       `${process.env.IBM_URL}/ml/v1/text/generation?version=2023-05-29`,
       {
         method: "POST",
@@ -70,18 +93,30 @@ Return ONLY valid JSON:
       }
     );
 
-    const data = await response.json();
+    const watsonData = await watsonRes.json();
+    console.log("WATSON RESPONSE:", watsonData);
 
-    const text = data.results?.[0]?.generated_text;
+    if (!watsonData.results || !watsonData.results[0]) {
+      return Response.json(
+        { error: "Invalid AI response", details: watsonData },
+        { status: 500 }
+      );
+    }
 
+    const text = watsonData.results[0].generated_text;
+
+    // =========================
+    // 6. Retornar JSON
+    // =========================
     return new Response(text, {
       headers: { "Content-Type": "application/json" },
     });
 
-  } catch (error) {
-    console.error(error);
+  } catch (error: any) {
+    console.error("FULL ERROR:", error);
+
     return Response.json(
-      { error: "failed to generate matches" },
+      { error: error.message || "unknown error" },
       { status: 500 }
     );
   }

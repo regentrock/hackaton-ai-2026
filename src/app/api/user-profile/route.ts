@@ -1,13 +1,10 @@
-// /api/user-profile
-
-import prisma from "@/src/lib/prisma";
+// src/app/api/user-profile/route.ts
 
 export async function GET() {
-  const user = await prisma.volunteer.findFirst(); // TEMPORÁRIO
-
   return Response.json({
-    name: user?.name || "João",
-    skills: user?.skills || ["cooking"],
-    location: user?.location || "Sumaré"
+    name: "João",
+    skills: ["cooking", "organization"],
+    location: "Sumaré",
+    city: "Sumaré"
   });
 }
