@@ -8,12 +8,23 @@ export default function MatchesPage() {
 
   useEffect(() => {
     async function fetchMatches() {
-      const res = await fetch('/api/match');
-      const data = await res.json();
+      try {
+        const res = await fetch(
+          'https://hackaton-ai-2026.vercel.app/api/match'
+        );
 
-      // ⚠️ depende do formato que o Orchestrate retorna
-      setMatches(data.matches || []);
-      setLoading(false);
+        const text = await res.text();
+        console.log("RAW:", text);
+
+        const cleaned = text.replace("Valid JSON:", "").trim();
+        const data = JSON.parse(cleaned);
+
+        setMatches(data);
+      } catch (error) {
+        console.error("ERROR:", error);
+      } finally {
+        setLoading(false);
+      }
     }
 
     fetchMatches();
@@ -23,21 +34,13 @@ export default function MatchesPage() {
 
   return (
     <div style={{ padding: 20 }}>
-      <h1>Best Volunteer Opportunities</h1>
+      <h1>Volunteer Opportunities for You</h1>
 
       {matches.map((match, index) => (
-        <div
-          key={index}
-          style={{
-            border: '1px solid #ccc',
-            padding: 16,
-            marginBottom: 12,
-            borderRadius: 8,
-          }}
-        >
+        <div key={index}>
           <h2>{match.title}</h2>
-          <p><strong>Location:</strong> {match.location}</p>
-          <p><strong>Why:</strong> {match.reason}</p>
+          <p>{match.location}</p>
+          <p>{match.reason}</p>
         </div>
       ))}
     </div>
