@@ -11,16 +11,20 @@ interface Match {
   location: string;
   description: string;
   skills: string[];
-  contactEmail: string;
-  matchScore: number;
-  matchedSkills?: string[];
-  matchReason?: string;
+  score: number;
+  reasoning: string;
+  matchedSkills: string[];
+  missingSkills: string[];
+  recommendation: string;
+  projectLink?: string;
+  theme?: string;
 }
 
 export default function MatchesPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [usingAI, setUsingAI] = useState(false);
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
@@ -40,7 +44,7 @@ export default function MatchesPage() {
       setLoading(true);
       setError(null);
 
-      const res = await fetch('/api/opportunities', {
+      const res = await fetch('/api/match', {
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
@@ -53,7 +57,13 @@ export default function MatchesPage() {
       }
 
       const data = await res.json();
-      setMatches(data.opportunities || []);
+      
+      if (data.success) {
+        setMatches(data.matches || []);
+        setUsingAI(data.usingAI || false);
+      } else {
+        setMatches(data.matches || []);
+      }
       
     } catch (err: any) {
       console.error('Error fetching matches:', err);
@@ -67,7 +77,8 @@ export default function MatchesPage() {
     return (
       <div style={styles.loadingContainer}>
         <div style={styles.spinner}></div>
-        <p>Encontrando as melhores oportunidades para você...</p>
+        <p>Analisando oportunidades com IA...</p>
+        <p style={styles.subLoading}>Isso pode levar alguns segundos</p>
       </div>
     );
   }
@@ -90,7 +101,14 @@ export default function MatchesPage() {
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.title}>🤝 Oportunidades para Você</h1>
+      <div style={styles.header}>
+        <h1 style={styles.title}>🤝 Oportunidades Inteligentes para Você</h1>
+        {usingAI && (
+          <div style={styles.aiBadge}>
+            🧠 Match realizado com IA WatsonX
+          </div>
+        )}
+      </div>
       
       {user.skills && user.skills.length > 0 && (
         <div style={styles.userSkillsCard}>
@@ -117,18 +135,21 @@ export default function MatchesPage() {
             <div key={match.id} style={styles.card}>
               <div style={styles.cardHeader}>
                 <h2 style={styles.cardTitle}>{match.title}</h2>
-                <div style={styles.matchScoreBadge(match.matchScore)}>
-                                  {match.matchScore}% match
+                <div style={styles.matchScoreBadge(match.score)}>
+                  {match.score}% match
                 </div>
               </div>
               
               <p style={styles.orgName}>🏢 {match.organization}</p>
               <p style={styles.location}>📍 {match.location}</p>
-              <p style={styles.description}>{match.description}</p>
+              {match.theme && (
+                <p style={styles.theme}>🎯 Tema: {match.theme}</p>
+              )}
+              <p style={styles.description}>{match.description?.substring(0, 200)}...</p>
               
               {match.matchedSkills && match.matchedSkills.length > 0 && (
                 <div style={styles.matchedSkillsSection}>
-                  <strong>✅ Habilidades compatíveis:</strong>
+                  <strong>✅ Suas habilidades que combinam:</strong>
                   <div style={styles.skillsList}>
                     {match.matchedSkills.map((skill, i) => (
                       <span key={i} style={styles.matchedSkillTag}>{skill}</span>
@@ -137,23 +158,35 @@ export default function MatchesPage() {
                 </div>
               )}
               
-              {match.skills && match.skills.length > 0 && (
-                <div style={styles.skillsSection}>
-                  <strong>📋 Habilidades desejadas:</strong>
+              {match.missingSkills && match.missingSkills.length > 0 && (
+                <div style={styles.missingSkillsSection}>
+                  <strong>📚 Habilidades para desenvolver:</strong>
                   <div style={styles.skillsList}>
-                    {match.skills.slice(0, 5).map((skill, i) => (
-                      <span key={i} style={styles.skillTag}>{skill}</span>
+                    {match.missingSkills.map((skill, i) => (
+                      <span key={i} style={styles.missingSkillTag}>{skill}</span>
                     ))}
                   </div>
                 </div>
               )}
               
-              {match.matchReason && (
-                <p style={styles.matchReason}>{match.matchReason}</p>
+              <div style={styles.reasoningSection}>
+                <strong>💡 Análise do Match:</strong>
+                <p style={styles.reasoning}>{match.reasoning}</p>
+              </div>
+              
+              <div style={styles.recommendationSection}>
+                <strong>🎯 Recomendação:</strong>
+                <p style={styles.recommendation}>{match.recommendation}</p>
+              </div>
+              
+              {match.projectLink && (
+                <a href={match.projectLink} target="_blank" rel="noopener noreferrer" style={styles.linkButton}>
+                  🔗 Ver Projeto Original
+                </a>
               )}
               
-              <a href={`mailto:${match.contactEmail}`} style={styles.contactButton}>
-                📧 Entrar em Contato
+              <a href={`mailto:voluntarios@globalgiving.org`} style={styles.contactButton}>
+                📧 Tenho Interesse
               </a>
             </div>
           ))}
@@ -172,18 +205,35 @@ const styles: { [key: string]: any } = {
     backgroundColor: '#f9fafb',
     minHeight: '100vh',
   },
+  header: {
+    textAlign: 'center' as const,
+    marginBottom: '2rem',
+  },
   title: {
     fontSize: '2rem',
-    marginBottom: '1.5rem',
-    textAlign: 'center',
+    marginBottom: '0.5rem',
     color: '#1f2937',
+  },
+  aiBadge: {
+    display: 'inline-block',
+    backgroundColor: '#7c3aed',
+    color: 'white',
+    padding: '0.25rem 0.75rem',
+    borderRadius: '20px',
+    fontSize: '0.75rem',
+    marginTop: '0.5rem',
+  },
+  subLoading: {
+    fontSize: '0.875rem',
+    color: '#6b7280',
+    marginTop: '0.5rem',
   },
   userSkillsCard: {
     backgroundColor: '#e0e7ff',
     borderRadius: '12px',
     padding: '1rem',
     marginBottom: '2rem',
-    textAlign: 'center',
+    textAlign: 'center' as const,
   },
   userSkillsList: {
     display: 'flex',
@@ -201,7 +251,7 @@ const styles: { [key: string]: any } = {
   },
   grid: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))',
     gap: '1.5rem',
   },
   card: {
@@ -210,7 +260,6 @@ const styles: { [key: string]: any } = {
     padding: '1.5rem',
     boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
     border: '1px solid #e5e7eb',
-    transition: 'transform 0.2s, box-shadow 0.2s',
   },
   cardHeader: {
     display: 'flex',
@@ -225,8 +274,8 @@ const styles: { [key: string]: any } = {
     flex: 1,
   },
   matchScoreBadge: (score: number) => ({
-    backgroundColor: score >= 70 ? '#dcfce7' : score >= 40 ? '#fef3c7' : '#fee2e2',
-    color: score >= 70 ? '#166534' : score >= 40 ? '#92400e' : '#991b1b',
+    backgroundColor: score >= 80 ? '#dcfce7' : score >= 60 ? '#fef3c7' : '#fee2e2',
+    color: score >= 80 ? '#166534' : score >= 60 ? '#92400e' : '#991b1b',
     padding: '0.25rem 0.75rem',
     borderRadius: '20px',
     fontSize: '0.75rem',
@@ -237,11 +286,16 @@ const styles: { [key: string]: any } = {
   orgName: {
     fontSize: '0.875rem',
     color: '#4b5563',
-    marginBottom: '0.5rem',
+    marginBottom: '0.25rem',
   },
   location: {
     fontSize: '0.875rem',
     color: '#6b7280',
+    marginBottom: '0.25rem',
+  },
+  theme: {
+    fontSize: '0.75rem',
+    color: '#7c3aed',
     marginBottom: '0.75rem',
   },
   description: {
@@ -255,8 +309,20 @@ const styles: { [key: string]: any } = {
     paddingTop: '0.75rem',
     borderTop: '1px solid #e5e7eb',
   },
-  skillsSection: {
+  missingSkillsSection: {
     marginTop: '0.75rem',
+  },
+  reasoningSection: {
+    marginTop: '0.75rem',
+    padding: '0.75rem',
+    backgroundColor: '#f3f4f6',
+    borderRadius: '8px',
+  },
+  recommendationSection: {
+    marginTop: '0.75rem',
+    padding: '0.75rem',
+    backgroundColor: '#fef3c7',
+    borderRadius: '8px',
   },
   skillsList: {
     display: 'flex',
@@ -271,18 +337,36 @@ const styles: { [key: string]: any } = {
     borderRadius: '20px',
     fontSize: '0.75rem',
   },
-  skillTag: {
-    backgroundColor: '#f3f4f6',
-    color: '#374151',
+  missingSkillTag: {
+    backgroundColor: '#fee2e2',
+    color: '#991b1b',
     padding: '0.25rem 0.75rem',
     borderRadius: '20px',
     fontSize: '0.75rem',
   },
-  matchReason: {
+  reasoning: {
     fontSize: '0.75rem',
-    color: '#6b7280',
+    color: '#4b5563',
+    marginTop: '0.25rem',
+    marginBottom: 0,
+  },
+  recommendation: {
+    fontSize: '0.75rem',
+    color: '#92400e',
+    marginTop: '0.25rem',
+    marginBottom: 0,
+    fontWeight: '500' as const,
+  },
+  linkButton: {
+    display: 'block',
+    textAlign: 'center' as const,
+    backgroundColor: '#4b5563',
+    color: 'white',
+    padding: '0.5rem 1rem',
+    borderRadius: '8px',
+    textDecoration: 'none',
+    fontSize: '0.875rem',
     marginTop: '0.75rem',
-    fontStyle: 'italic',
   },
   contactButton: {
     display: 'block',
@@ -294,8 +378,7 @@ const styles: { [key: string]: any } = {
     textDecoration: 'none',
     fontSize: '0.875rem',
     fontWeight: '500',
-    marginTop: '1rem',
-    transition: 'background-color 0.2s',
+    marginTop: '0.75rem',
   },
   loadingContainer: {
     display: 'flex',
@@ -344,7 +427,6 @@ const styles: { [key: string]: any } = {
   },
 };
 
-// Adicionar keyframe para animação
 if (typeof document !== 'undefined') {
   const style = document.createElement('style');
   style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
