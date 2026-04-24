@@ -41,6 +41,14 @@ const mockOpportunities = [
     location: "Recife, PE",
     description: "Mentorar jovens em programação",
     skills: ["Programação", "Mentoria", "JavaScript"]
+  },
+  {
+    id: 6,
+    title: "Cozinheiro chefe",
+    organization: "ONG alimentar",
+    location: "Hortolândia, SP",
+    description: "Preparar alimentos para os necessitados",
+    skills: ["cozinhar", "alimentação", "comida"]
   }
 ];
 
