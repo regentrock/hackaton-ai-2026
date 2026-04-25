@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/src/contexts/AuthContext';
 import styles from './Navbar.module.css';
@@ -56,8 +57,14 @@ export default function Navbar() {
       <div className={styles.navbarContainer}>
         {/* Logo */}
         <Link href="/" className={styles.logo} onClick={closeMenu}>
-          <span className={styles.logoMark}>Volunta</span>
-          <span className={styles.logoHighlight}>Re</span>
+          <Image 
+            src="/logo.png" 
+            alt="VoluntaRe" 
+            width={140} 
+            height={48}
+            className={styles.logoImage}
+            priority
+          />
         </Link>
 
         {/* Desktop Menu */}
@@ -100,8 +107,13 @@ export default function Navbar() {
         <div className={`${styles.mobileMenu} ${isMenuOpen ? styles.show : ''}`}>
           <div className={styles.mobileMenuHeader}>
             <div className={styles.mobileLogo}>
-              <span className={styles.logoMark}>Volunta</span>
-              <span className={styles.logoHighlight}>Re</span>
+              <Image 
+                src="/logo.png" 
+                alt="VoluntaRe" 
+                width={110} 
+                height={40}
+                className={styles.mobileLogoImage}
+              />
             </div>
             <button className={styles.closeButton} onClick={closeMenu}>✕</button>
           </div>

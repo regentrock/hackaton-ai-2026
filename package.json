@@ -10,6 +10,7 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@fortawesome/fontawesome-free": "^7.2.0",
     "@ibm-cloud/watsonx-ai": "^1.7.11",
     "@prisma/client": "^5.22.0",
     "bcrypt": "^6.0.0",
