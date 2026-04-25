@@ -4,51 +4,46 @@ export async function GET() {
   const apiKey = process.env.GLOBAL_GIVING_API_KEY;
   
   if (!apiKey) {
-    return NextResponse.json({ 
-      error: 'API key not configured',
-      hasKey: false 
-    }, { status: 500 });
+    return NextResponse.json({ error: 'API key not found' }, { status: 500 });
   }
 
-  const results: any = {
-    apiKeyPresent: true,
-    apiKeyPreview: `${apiKey.substring(0, 8)}...`,
-    tests: []
-  };
-
-  // Teste 1: Buscar projetos ativos no Brasil
-  // Conforme documentação: /api/public/projectservice/countries/{iso}/projects/active [citation:1]
+  const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}`;
+  
   try {
-    const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}`;
-    console.log('Testing URL:', url.replace(apiKey, 'HIDDEN'));
-    
     const response = await fetch(url, {
-      headers: { 'Accept': 'application/json' },
+      headers: { 'Accept': 'application/json' }
     });
-
-    const data = await response.json();
     
-    results.tests.push({
-      endpoint: '/countries/BR/projects/active',
-      status: response.status,
-      ok: response.ok,
-      projectsFound: data.projects?.project?.length || 0,
-      hasNext: data.projects?.hasNext || false
+    const data = await response.json();
+    const projects = data.projects?.project || [];
+    
+    return NextResponse.json({
+      success: true,
+      totalProjects: projects.length,
+      firstProject: projects[0] ? {
+        title: projects[0].title,
+        theme: projects[0].themeName,
+        summary: projects[0].summary
+      } : null,
+      sampleSkills: projects.slice(0, 5).map((p: any) => ({
+        title: p.title,
+        extractedSkills: extractSkillsFromTitle(p.title)
+      }))
     });
-
-    if (data.projects?.project?.length > 0) {
-      results.sampleProject = {
-        id: data.projects.project[0].id,
-        title: data.projects.project[0].title,
-        organization: data.projects.project[0].organization?.name
-      };
-    }
   } catch (error: any) {
-    results.tests.push({
-      endpoint: '/countries/BR/projects/active',
-      error: error.message
-    });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
+}
 
-  return NextResponse.json(results);
+function extractSkillsFromTitle(title: string): string[] {
+  const skills: string[] = [];
+  const text = title.toLowerCase();
+  
+  if (text.includes('educ') || text.includes('ensin') || text.includes('profess')) skills.push('Ensino');
+  if (text.includes('criança') || text.includes('criancas')) skills.push('Crianças');
+  if (text.includes('saude')) skills.push('Saúde');
+  if (text.includes('ambient')) skills.push('Meio Ambiente');
+  if (text.includes('social')) skills.push('Ação Social');
+  
+  return skills;
 }
