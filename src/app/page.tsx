@@ -5,7 +5,6 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useEffect, useState } from 'react';
 import styles from './page.module.css';
 import Footer from '@/src/components/Footer/Footer'
-import '@fortawesome/fontawesome-free/css/all.min.css';
 
 export default function HomePage() {
   const router = useRouter();
