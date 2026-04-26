@@ -1,0 +1,56 @@
+/* Container principal do chat */
+.chatContainer {
+  position: fixed;
+  bottom: 100px;
+  right: 24px;
+  z-index: 1000;
+}
+
+/* Root do chat embutido */
+.chatRoot {
+  width: 400px;
+  height: 550px;
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Para garantir que o iframe/chat do Orchestrate ocupe todo espaço */
+.chatRoot :global(iframe),
+.chatRoot :global(.wxo-chat) {
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+}
+
+/* Responsivo para tablets */
+@media (max-width: 768px) {
+  .chatContainer {
+    bottom: 80px;
+    right: 16px;
+  }
+  
+  .chatRoot {
+    width: 360px;
+    height: 500px;
+  }
+}
+
+/* Responsivo para mobile */
+@media (max-width: 640px) {
+  .chatContainer {
+    bottom: 70px;
+    right: 12px;
+    left: 12px;
+  }
+  
+  .chatRoot {
+    width: calc(100vw - 24px);
+    height: 60vh;
+    right: 12px;
+    bottom: 70px;
+  }
+}
