@@ -3,7 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import styles from './page.module.css';
+import styles from './matches.module.css';
+import '@fortawesome/fontawesome-free/css/all.min.css';
 
 interface Match {
   id: string;
@@ -12,10 +13,10 @@ interface Match {
   location: string;
   description: string;
   skills: string[];
-  score: number;
-  reasoning: string;
+  matchScore: number;
   matchedSkills: string[];
   missingSkills: string[];
+  reasoning: string;
   recommendation: string;
   priority: 'high' | 'medium' | 'low';
   projectLink?: string;
@@ -47,6 +48,8 @@ export default function MatchesPage() {
       setLoading(true);
       setError(null);
 
+      console.log('🔍 Fetching matches from API...');
+      
       const res = await fetch('/api/match', {
         credentials: 'include',
         headers: {
@@ -61,6 +64,10 @@ export default function MatchesPage() {
 
       const data = await res.json();
       
+      console.log('📊 Matches received:', data);
+      console.log('🤖 Using AI:', data.usingAI);
+      console.log('📈 Total matches:', data.matches?.length);
+      
       if (data.success) {
         setMatches(data.matches || []);
         setUsingAI(data.usingAI || false);
@@ -69,7 +76,7 @@ export default function MatchesPage() {
       }
       
     } catch (err: any) {
-      console.error('Error fetching matches:', err);
+      console.error('❌ Error fetching matches:', err);
       setError(err.message || 'Erro ao carregar oportunidades');
     } finally {
       setLoading(false);
@@ -90,7 +97,8 @@ export default function MatchesPage() {
     return (
       <div className={styles.loadingContainer}>
         <div className={styles.spinner}></div>
-        <p>Analisando oportunidades com IA...</p>
+        <p>Analisando oportunidades com IA WatsonX...</p>
+        <p className={styles.subLoading}>Isso pode levar alguns segundos</p>
       </div>
     );
   }
@@ -218,8 +226,8 @@ export default function MatchesPage() {
                       <p className={styles.organization}>{match.organization}</p>
                     </div>
                   </div>
-                  <div className={`${styles.scoreBadge} ${styles[`score${Math.floor(match.score / 25) * 25}`]}`}>
-                    <span className={styles.scoreValue}>{match.score}%</span>
+                  <div className={`${styles.scoreBadge} ${getScoreClass(match.matchScore)}`}>
+                    <span className={styles.scoreValue}>{match.matchScore}%</span>
                     <span className={styles.scoreLabel}>match</span>
                   </div>
                 </div>
@@ -291,4 +299,11 @@ export default function MatchesPage() {
       </div>
     </div>
   );
+}
+
+function getScoreClass(score: number): string {
+  if (score >= 75) return 'scoreHigh';
+  if (score >= 50) return 'scoreMedium';
+  if (score >= 25) return 'scoreLow';
+  return 'scoreVeryLow';
 }

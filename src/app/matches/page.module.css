@@ -594,6 +594,60 @@
   background: var(--color-primary-dark);
 }
 
+/* Score Badge */
+.scoreBadge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.75rem;
+  min-width: 55px;
+}
+
+.scoreHigh {
+  background: #dcfce7;
+}
+
+.scoreMedium {
+  background: #fef3c7;
+}
+
+.scoreLow {
+  background: #fef2f2;
+}
+
+.scoreVeryLow {
+  background: #f3f4f6;
+}
+
+.scoreValue {
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.scoreHigh .scoreValue {
+  color: #166534;
+}
+
+.scoreMedium .scoreValue {
+  color: #92400e;
+}
+
+.scoreLow .scoreValue {
+  color: #dc2626;
+}
+
+.scoreVeryLow .scoreValue {
+  color: #6b7280;
+}
+
+.scoreLabel {
+  font-size: 0.6rem;
+  font-weight: 500;
+  color: #6b7280;
+}
+
 /* =========================
    RESPONSIVE
 ========================= */
