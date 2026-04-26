@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/src/lib/auth/authUtils';
+import { prisma } from '@/src/lib/prisma';
 
 export async function POST(request: NextRequest) {
   try {
     console.log('📌 POST /api/user/saved - Salvando oportunidade');
     
-    // 1. Autenticação
     let token = request.cookies.get('auth_token')?.value;
     
     if (!token) {
@@ -16,21 +16,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (!token) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const decoded = verifyToken(token);
     if (!decoded) {
-      return NextResponse.json(
-        { error: 'Invalid token' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    // 2. Buscar dados da requisição
     const body = await request.json();
     const {
       opportunityId,
@@ -47,45 +40,71 @@ export async function POST(request: NextRequest) {
 
     if (!opportunityId || !title || !organization) {
       return NextResponse.json(
-        { error: 'Campos obrigatórios faltando: opportunityId, title, organization' },
+        { error: 'Campos obrigatórios faltando' },
         { status: 400 }
       );
     }
 
-    // 3. Salvar no banco
-    const { prisma } = await import('@/src/lib/prisma');
-    
-    const saved = await prisma.savedOpportunity.upsert({
-      where: {
-        volunteerId_opportunityId: {
-          volunteerId: decoded.userId,
-          opportunityId: opportunityId
-        }
-      },
-      update: {
-        notes: notes || undefined,
-        matchScore: matchScore || undefined
-      },
-      create: {
-        volunteerId: decoded.userId,
-        opportunityId,
-        title,
-        organization,
-        location: location || '',
-        description: description || '',
-        skills: skills || [],
-        theme: theme || null,
-        matchScore: matchScore || null,
-        projectLink: projectLink || null,
-        notes: notes || null
+    // Usar $executeRaw para executar SQL diretamente (mais confiável)
+    try {
+      await prisma.$executeRaw`
+        INSERT INTO "SavedOpportunity" (
+          "id", "opportunityId", "title", "organization", "location", 
+          "description", "skills", "theme", "matchScore", "projectLink", 
+          "notes", "volunteerId", "savedAt"
+        ) VALUES (
+          gen_random_uuid(), ${opportunityId}, ${title}, ${organization}, ${location || ''},
+          ${description || ''}, ${skills || []}::text[], ${theme || null}, ${matchScore || null}, ${projectLink || null},
+          ${notes || null}, ${decoded.userId}, NOW()
+        )
+        ON CONFLICT ("volunteerId", "opportunityId") DO NOTHING
+      `;
+    } catch (sqlError: any) {
+      // Se a tabela não existir, vamos criá-la
+      if (sqlError.message?.includes('relation') || sqlError.message?.includes('does not exist')) {
+        console.log('Tabela não existe, criando...');
+        
+        await prisma.$executeRaw`
+          CREATE TABLE IF NOT EXISTS "SavedOpportunity" (
+            "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            "opportunityId" TEXT NOT NULL,
+            "title" TEXT NOT NULL,
+            "organization" TEXT NOT NULL,
+            "location" TEXT NOT NULL,
+            "description" TEXT NOT NULL,
+            "skills" TEXT[] DEFAULT '{}',
+            "theme" TEXT,
+            "matchScore" INTEGER,
+            "projectLink" TEXT,
+            "savedAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            "notes" TEXT,
+            "volunteerId" TEXT NOT NULL,
+            CONSTRAINT "SavedOpportunity_volunteerId_opportunityId_key" UNIQUE ("volunteerId", "opportunityId")
+          )
+        `;
+        
+        // Tentar inserir novamente
+        await prisma.$executeRaw`
+          INSERT INTO "SavedOpportunity" (
+            "id", "opportunityId", "title", "organization", "location", 
+            "description", "skills", "theme", "matchScore", "projectLink", 
+            "notes", "volunteerId", "savedAt"
+          ) VALUES (
+            gen_random_uuid(), ${opportunityId}, ${title}, ${organization}, ${location || ''},
+            ${description || ''}, ${skills || []}::text[], ${theme || null}, ${matchScore || null}, ${projectLink || null},
+            ${notes || null}, ${decoded.userId}, NOW()
+          )
+          ON CONFLICT ("volunteerId", "opportunityId") DO NOTHING
+        `;
+      } else {
+        throw sqlError;
       }
-    });
+    }
 
-    console.log('✅ Oportunidade salva com sucesso:', saved.id);
+    console.log('✅ Oportunidade salva com sucesso');
     
     return NextResponse.json({
       success: true,
-      saved: saved,
       message: 'Oportunidade salva com sucesso!'
     });
 
@@ -100,9 +119,6 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    console.log('🗑️ DELETE /api/user/saved - Removendo oportunidade salva');
-    
-    // 1. Autenticação
     let token = request.cookies.get('auth_token')?.value;
     
     if (!token) {
@@ -113,21 +129,14 @@ export async function DELETE(request: NextRequest) {
     }
 
     if (!token) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const decoded = verifyToken(token);
     if (!decoded) {
-      return NextResponse.json(
-        { error: 'Invalid token' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    // 2. Buscar opportunityId da query
     const { searchParams } = new URL(request.url);
     const opportunityId = searchParams.get('opportunityId');
 
@@ -138,25 +147,18 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // 3. Remover do banco
-    const { prisma } = await import('@/src/lib/prisma');
-    
-    await prisma.savedOpportunity.deleteMany({
-      where: {
-        volunteerId: decoded.userId,
-        opportunityId: opportunityId
-      }
-    });
+    await prisma.$executeRaw`
+      DELETE FROM "SavedOpportunity" 
+      WHERE "volunteerId" = ${decoded.userId} AND "opportunityId" = ${opportunityId}
+    `;
 
-    console.log('✅ Oportunidade removida com sucesso');
-    
     return NextResponse.json({
       success: true,
       message: 'Oportunidade removida dos salvos'
     });
 
   } catch (error: any) {
-    console.error('❌ Erro ao remover oportunidade salva:', error);
+    console.error('❌ Erro ao remover:', error);
     return NextResponse.json(
       { error: error.message || 'Erro interno do servidor' },
       { status: 500 }
@@ -166,9 +168,6 @@ export async function DELETE(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    console.log('📋 GET /api/user/saved - Listando oportunidades salvas');
-    
-    // 1. Autenticação
     let token = request.cookies.get('auth_token')?.value;
     
     if (!token) {
@@ -179,42 +178,28 @@ export async function GET(request: NextRequest) {
     }
 
     if (!token) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const decoded = verifyToken(token);
     if (!decoded) {
-      return NextResponse.json(
-        { error: 'Invalid token' },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    // 2. Buscar oportunidades salvas
-    const { prisma } = await import('@/src/lib/prisma');
-    
-    const saved = await prisma.savedOpportunity.findMany({
-      where: {
-        volunteerId: decoded.userId
-      },
-      orderBy: {
-        savedAt: 'desc'
-      }
-    });
+    const saved = await prisma.$queryRaw`
+      SELECT * FROM "SavedOpportunity" 
+      WHERE "volunteerId" = ${decoded.userId}
+      ORDER BY "savedAt" DESC
+    `;
 
-    console.log(`✅ ${saved.length} oportunidades salvas encontradas`);
-    
     return NextResponse.json({
       success: true,
       saved: saved,
-      total: saved.length
+      total: (saved as any[]).length
     });
 
   } catch (error: any) {
-    console.error('❌ Erro ao listar oportunidades salvas:', error);
+    console.error('❌ Erro ao listar:', error);
     return NextResponse.json(
       { error: error.message || 'Erro interno do servidor' },
       { status: 500 }

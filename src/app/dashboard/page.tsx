@@ -4,6 +4,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import styles from './page.module.css';
+import SavedOpportunities from '@/src/components/SavedOpportunities/SavedOpportunities';
 
 export default function DashboardPage() {
   const { user, loading, logout, updateUser } = useAuth();
@@ -335,6 +336,8 @@ export default function DashboardPage() {
               <div className={styles.memberDate}>{formatDate(user.createdAt)}</div>
             </div>
           </div>
+
+          <SavedOpportunities/>
         </div>
       </div>
     </>

@@ -20,33 +20,29 @@ model Volunteer {
 
   createdAt     DateTime @default(now())
   
-  // Relação com recomendações salvas
   savedOpportunities SavedOpportunity[]
 }
 
 model SavedOpportunity {
   id            String   @id @default(uuid())
   
-  // Informações da oportunidade
-  opportunityId  String   // ID da oportunidade na GlobalGiving
+  opportunityId  String
   title          String
   organization   String
   location       String
   description    String
-  skills         String[] // JSON array de habilidades
+  skills         String[]
   theme          String?
-  matchScore     Int?     // Score do match quando foi salvo
+  matchScore     Int?
   projectLink    String?
   
-  // Metadados
   savedAt        DateTime @default(now())
-  notes          String?  // Notas pessoais do usuário sobre a oportunidade
+  notes          String?
   
-  // Relacionamentos
   volunteerId    String
   volunteer      Volunteer @relation(fields: [volunteerId], references: [id], onDelete: Cascade)
   
-  @@unique([volunteerId, opportunityId]) // Evita salvar a mesma oportunidade duas vezes
+  @@unique([volunteerId, opportunityId])
   @@index([volunteerId])
   @@index([savedAt])
 }
