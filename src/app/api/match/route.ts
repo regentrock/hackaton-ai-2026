@@ -16,15 +16,6 @@ interface MatchResult {
   priority: 'high' | 'medium' | 'low';
 }
 
-// Cache em memória para projetos da GlobalGiving (1 hora)
-let cachedProjects: any[] | null = null;
-let cacheTimestamp: number = 0;
-const CACHE_DURATION = 60 * 60 * 1000; // 1 hora
-
-// Cache do token IAM (expira em 50 minutos)
-let cachedIAMToken: string | null = null;
-let iamTokenExpiry: number = 0;
-
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
   console.log('\n🚀 ========== MATCH API INICIADA ==========');
@@ -100,11 +91,11 @@ export async function GET(request: NextRequest) {
     console.log(`   - Disponibilidade: ${user.availability || 'Não informada'}`);
 
     // =========================
-    // 3. BUSCAR OPORTUNIDADES (COM PAGINAÇÃO E CACHE)
+    // 3. BUSCAR OPORTUNIDADES (COM PAGINAÇÃO)
     // =========================
     console.log('\n🌍 [3/5] Buscando oportunidades da GlobalGiving...');
     
-    const opportunities = await fetchOpportunitiesWithCache(user);
+    const opportunities = await fetchFreshOpportunities(user);
     
     if (opportunities.length === 0) {
       console.log('❌ Nenhuma oportunidade encontrada');
@@ -118,7 +109,7 @@ export async function GET(request: NextRequest) {
     console.log(`✅ ${opportunities.length} oportunidades encontradas para análise`);
 
     // =========================
-    // 4. MATCHING INTELIGENTE OTIMIZADO
+    // 4. MATCHING INTELIGENTE
     // =========================
     console.log('\n🧠 [4/5] Iniciando matching inteligente...');
     
@@ -134,7 +125,7 @@ export async function GET(request: NextRequest) {
     let matches: MatchResult[] = [];
     
     try {
-      matches = await performIntelligentMatchingOptimized(user, opportunities, hasWatsonX);
+      matches = await performIntelligentMatching(user, opportunities, hasWatsonX);
       console.log(`🎯 Matching concluído: ${matches.length} oportunidades analisadas`);
       console.log(`   - Alta compatibilidade: ${matches.filter(m => m.priority === 'high').length}`);
       console.log(`   - Média compatibilidade: ${matches.filter(m => m.priority === 'medium').length}`);
@@ -142,7 +133,7 @@ export async function GET(request: NextRequest) {
     } catch (aiError) {
       console.error('❌ Erro no matching inteligente:', aiError);
       console.log('🔄 Executando fallback matching...');
-      matches = performFallbackMatchingOptimized(user, opportunities);
+      matches = performFallbackMatching(user, opportunities);
     }
 
     // =========================
@@ -167,7 +158,6 @@ export async function GET(request: NextRequest) {
       totalAnalyzed: opportunities.length,
       usingAI: hasWatsonX,
       userSkills: user.skills || [],
-      executionTimeMs: executionTime,
       timestamp: new Date().toISOString()
     });
 
@@ -180,17 +170,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Função com cache para buscar oportunidades
-async function fetchOpportunitiesWithCache(user: any): Promise<any[]> {
-  const now = Date.now();
-  
-  // Verificar cache válido
-  if (cachedProjects && (now - cacheTimestamp) < CACHE_DURATION) {
-    console.log('   📦 Usando cache de projetos (válido por mais 1 hora)');
-    return cachedProjects;
-  }
-  
-  console.log('   🔄 Buscando projetos frescos da GlobalGiving...');
+async function fetchFreshOpportunities(user: any): Promise<any[]> {
+  console.log('   📡 Chamando API GlobalGiving...');
   
   const apiKey = process.env.GLOBAL_GIVING_API_KEY;
   
@@ -237,12 +218,14 @@ async function fetchOpportunitiesWithCache(user: any): Promise<any[]> {
         console.log(`   📄 Fim da paginação na página ${pageCount}`);
         break;
       }
+      
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
     
     console.log(`   ✅ TOTAL: ${allProjects.length} projetos recebidos da GlobalGiving`);
     
     const projectsToAnalyze = allProjects.slice(0, 250);
-    console.log(`   🔍 Analisando ${projectsToAnalyze.length} projetos (máximo 250 para performance)`);
+    console.log(`   🔍 Analisando ${projectsToAnalyze.length} projetos`);
     
     const enrichedProjects = projectsToAnalyze.map((project: any) => ({
       id: project.id,
@@ -258,15 +241,11 @@ async function fetchOpportunitiesWithCache(user: any): Promise<any[]> {
     const projectsWithSkills = enrichedProjects.filter(p => p.skills.length > 0);
     console.log(`   🎯 ${projectsWithSkills.length} projetos com skills identificadas`);
     
-    // Armazenar em cache
-    cachedProjects = projectsWithSkills;
-    cacheTimestamp = now;
-    
     return projectsWithSkills;
     
   } catch (error) {
     console.error('   ❌ Erro ao buscar oportunidades:', error);
-    return cachedProjects || [];
+    return [];
   }
 }
 
@@ -308,73 +287,42 @@ function extractRelevantSkills(project: any, userSkills: string[]): string[] {
   return [...new Set(skills)].slice(0, 5);
 }
 
-// Versão otimizada do matching inteligente
-async function performIntelligentMatchingOptimized(
+async function performIntelligentMatching(
   user: any, 
   opportunities: any[], 
   hasWatsonX: boolean
 ): Promise<MatchResult[]> {
-  console.log('\n🤖 INICIANDO ANÁLISE INTELIGENTE OTIMIZADA...');
+  console.log('\n🤖 INICIANDO ANÁLISE INTELIGENTE...');
   console.log(`🎯 Skills do usuário: ${user.skills?.join(', ') || 'NENHUMA'}`);
   console.log(`📊 Total de oportunidades: ${opportunities.length}`);
   
-  // PRÉ-FILTRO: reduzir para TOP 80 projetos mais promissores antes da IA
-  const preFiltered = preFilterOpportunitiesFast(opportunities, user.skills || []);
-  console.log(`   🔍 Pré-filtro: ${opportunities.length} → ${preFiltered.length} projetos com potencial`);
-  
   const results: MatchResult[] = [];
-  const concurrencyLimit = 3; // Processar 3 simultaneamente
+  const batchSize = hasWatsonX ? 3 : 5;
   
-  // Processar em lotes paralelos
-  for (let i = 0; i < preFiltered.length; i += concurrencyLimit) {
-    const batch = preFiltered.slice(i, i + concurrencyLimit);
-    const batchNum = Math.floor(i / concurrencyLimit) + 1;
-    const totalBatches = Math.ceil(preFiltered.length / concurrencyLimit);
+  for (let i = 0; i < opportunities.length; i += batchSize) {
+    const batch = opportunities.slice(i, i + batchSize);
+    const batchNum = Math.floor(i / batchSize) + 1;
+    const totalBatches = Math.ceil(opportunities.length / batchSize);
     
-    console.log(`\n📦 Processando lote ${batchNum}/${totalBatches} (${batch.length} oportunidades em paralelo)`);
+    console.log(`\n📦 Processando lote ${batchNum}/${totalBatches} (${batch.length} oportunidades)`);
     
     const batchPromises = batch.map(async (opportunity: any, idx: number) => {
-      console.log(`   🔍 Analisando: "${opportunity.title.substring(0, 45)}..."`);
+      console.log(`   🔍 [${idx + 1}] Analisando: "${opportunity.title.substring(0, 50)}..."`);
       return await analyzeMatchWithAI(user, opportunity, hasWatsonX);
     });
     
     const batchResults = await Promise.all(batchPromises);
     results.push(...batchResults);
     
-    const scores = batchResults.map(r => r.matchScore).join(', ');
-    console.log(`   ✅ Lote ${batchNum} concluído. Scores: ${scores}%`);
+    console.log(`   ✅ Lote ${batchNum} concluído. Scores: ${batchResults.map(r => r.matchScore).join(', ')}%`);
+    
+    if (i + batchSize < opportunities.length) {
+      console.log(`   ⏳ Aguardando 500ms...`);
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
   }
   
   return results;
-}
-
-// Pré-filtro rápido para reduzir projetos analisados pela IA
-function preFilterOpportunitiesFast(opportunities: any[], userSkills: string[]): any[] {
-  if (!userSkills.length) return opportunities.slice(0, 60);
-  
-  const userSkillsLower = userSkills.map(s => s.toLowerCase());
-  
-  const scored = opportunities.map(opp => {
-    let score = 0;
-    const oppSkillsLower = opp.skills.map((s: string) => s.toLowerCase());
-    
-    for (const userSkill of userSkillsLower) {
-      for (const oppSkill of oppSkillsLower) {
-        if (oppSkill.includes(userSkill) || userSkill.includes(oppSkill)) {
-          score += 25;
-          break;
-        }
-      }
-    }
-    
-    return { opp, score };
-  });
-  
-  return scored
-    .filter(item => item.score > 0)
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 60)
-    .map(item => item.opp);
 }
 
 async function analyzeMatchWithAI(
@@ -385,7 +333,7 @@ async function analyzeMatchWithAI(
   if (hasWatsonX) {
     console.log(`      🧠 Chamando WatsonX...`);
     try {
-      const aiResult = await callWatsonXForMatchOptimized(user, opportunity);
+      const aiResult = await callWatsonXForMatch(user, opportunity);
       console.log(`      ✅ Score: ${aiResult.matchScore}%`);
       return aiResult;
     } catch (error) {
@@ -400,120 +348,101 @@ async function analyzeMatchWithAI(
   }
 }
 
-// Versão otimizada com timeout e cache de token
-async function callWatsonXForMatchOptimized(user: any, opportunity: any): Promise<MatchResult> {
+async function callWatsonXForMatch(user: any, opportunity: any): Promise<MatchResult> {
   const startTime = Date.now();
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8000); // Timeout de 8 segundos
   
-  try {
-    const accessToken = await getIAMTokenCached();
-    
-    // Prompt reduzido para resposta mais rápida
-    const prompt = `Compare volunteer skills with opportunity. Return ONLY JSON.
-
-Volunteer Skills: ${user.skills?.join(', ') || 'None'}
-Opportunity: ${opportunity.title}
-Required Skills: ${opportunity.skills?.join(', ') || 'Not specified'}
-
-Output: {"score": number, "reasoning": "em português resumido", "matchedSkills": [], "missingSkills": [], "recommendation": "em português"}`;
-
-    const response = await fetch(`${process.env.IBM_URL}/ml/v1/text/generation?version=2023-05-29`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        input: prompt,
-        model_id: "ibm/granite-3-8b-instruct",
-        project_id: process.env.IBM_PROJECT_ID,
-        parameters: {
-          decoding_method: "greedy",
-          max_new_tokens: 200, // Reduzido
-          temperature: 0.1,
-        },
-      }),
-      signal: controller.signal
-    });
-    
-    clearTimeout(timeoutId);
-    
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    
-    const data = await response.json();
-    const aiText = data.results[0].generated_text;
-    const cleanText = aiText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-    
-    if (!jsonMatch) throw new Error('No JSON found');
-    
-    const parsed = JSON.parse(jsonMatch[0]);
-    
-    const userSkillsLower = user.skills?.map((s: string) => s.toLowerCase()) || [];
-    const validMatchedSkills = (parsed.matchedSkills || []).filter((skill: string) =>
-      userSkillsLower.some((us: string) => us.includes(skill.toLowerCase()))
-    );
-    
-    let score = Math.min(100, Math.max(0, parsed.score || 50));
-    
-    if (validMatchedSkills.length > 0 && user.skills?.length > 0) {
-      const skillMatchRatio = validMatchedSkills.length / Math.max(opportunity.skills?.length || 1, 1);
-      score = Math.floor(Math.min(100, Math.max(0, score * (0.7 + skillMatchRatio * 0.3))));
-    }
-    
-    const priority: 'high' | 'medium' | 'low' = score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low';
-    
-    console.log(`         ⏱️  ${Date.now() - startTime}ms`);
-    
-    return {
-      id: opportunity.id,
-      title: opportunity.title,
-      organization: opportunity.organization,
-      location: opportunity.location,
-      description: opportunity.description,
-      skills: opportunity.skills,
-      matchScore: score,
-      matchedSkills: validMatchedSkills.slice(0, 4),
-      missingSkills: (parsed.missingSkills || []).slice(0, 3),
-      reasoning: parsed.reasoning || `Análise baseada nas suas habilidades.`,
-      recommendation: parsed.recommendation || `Esta oportunidade pode ser uma boa opção para você.`,
-      priority
-    };
-    
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
-  }
-}
-
-// Cache do token IAM
-async function getIAMTokenCached(): Promise<string> {
-  if (cachedIAMToken && Date.now() < iamTokenExpiry) {
-    return cachedIAMToken;
-  }
-  
-  const response = await fetch('https://iam.cloud.ibm.com/identity/token', {
+  const iamResponse = await fetch('https://iam.cloud.ibm.com/identity/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: `grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=${process.env.IBM_API_KEY}`,
   });
   
-  if (!response.ok) {
-    throw new Error(`IAM token failed: ${response.status}`);
+  if (!iamResponse.ok) {
+    throw new Error(`IAM token failed: ${iamResponse.status}`);
   }
   
-  const data = await response.json();
-  const newToken = data.access_token;
+  const iamData = await iamResponse.json();
+  const accessToken = iamData.access_token;
   
-  if (!newToken || typeof newToken !== 'string') {
-    throw new Error('Invalid token received');
+  const prompt = `You are an expert volunteer-job matching AI. Analyze this match.
+
+VOLUNTEER SKILLS: ${user.skills?.join(', ') || 'None'}
+OPPORTUNITY: ${opportunity.title}
+REQUIRED SKILLS: ${opportunity.skills?.join(', ') || 'Not specified'}
+
+Calculate match score (0-100). Return ONLY JSON:
+{
+  "score": number,
+  "reasoning": "em português",
+  "matchedSkills": [],
+  "missingSkills": [],
+  "recommendation": "em português"
+}`;
+
+  const watsonResponse = await fetch(`${process.env.IBM_URL}/ml/v1/text/generation?version=2023-05-29`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      input: prompt,
+      model_id: "ibm/granite-3-8b-instruct",
+      project_id: process.env.IBM_PROJECT_ID,
+      parameters: {
+        decoding_method: "greedy",
+        max_new_tokens: 250,
+        temperature: 0.2,
+        min_new_tokens: 50,
+      },
+    }),
+  });
+
+  if (!watsonResponse.ok) {
+    throw new Error(`WatsonX API error: ${watsonResponse.status}`);
+  }
+
+  const data = await watsonResponse.json();
+  const aiText = data.results[0].generated_text;
+  const cleanText = aiText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+  const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+  
+  if (!jsonMatch) {
+    throw new Error('No JSON found');
   }
   
-  cachedIAMToken = newToken;
-  iamTokenExpiry = Date.now() + 50 * 60 * 1000;
+  const parsed = JSON.parse(jsonMatch[0]);
   
-  return cachedIAMToken;
+  const userSkillsLower = user.skills?.map((s: string) => s.toLowerCase()) || [];
+  const validMatchedSkills = (parsed.matchedSkills || []).filter((skill: string) =>
+    userSkillsLower.some((us: string) => us.includes(skill.toLowerCase()))
+  );
+  
+  let score = Math.min(100, Math.max(0, parsed.score || 50));
+  
+  if (validMatchedSkills.length > 0 && user.skills?.length > 0) {
+    const skillMatchRatio = validMatchedSkills.length / Math.max(opportunity.skills?.length || 1, 1);
+    score = Math.floor(Math.min(100, Math.max(0, score * (0.7 + skillMatchRatio * 0.3))));
+  }
+  
+  const priority: 'high' | 'medium' | 'low' = score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low';
+  
+  console.log(`         ⏱️ ${Date.now() - startTime}ms`);
+  
+  return {
+    id: opportunity.id,
+    title: opportunity.title,
+    organization: opportunity.organization,
+    location: opportunity.location,
+    description: opportunity.description,
+    skills: opportunity.skills,
+    matchScore: score,
+    matchedSkills: validMatchedSkills.slice(0, 4),
+    missingSkills: (parsed.missingSkills || []).slice(0, 3),
+    reasoning: parsed.reasoning || `Análise baseada nas suas habilidades.`,
+    recommendation: parsed.recommendation || `Esta oportunidade pode ser uma boa opção para você.`,
+    priority
+  };
 }
 
 function calculateBasicScore(userSkills: string[], projectSkills: string[]): number {
@@ -563,13 +492,10 @@ function createFallbackResult(opportunity: any, user: any, score: number): Match
   };
 }
 
-function performFallbackMatchingOptimized(user: any, opportunities: any[]): MatchResult[] {
-  console.log('📋 Executando fallback matching rápido...');
+function performFallbackMatching(user: any, opportunities: any[]): MatchResult[] {
+  console.log('📋 Executando fallback matching...');
   
-  // Pegar apenas os primeiros 30 para fallback mais rápido
-  const topOpportunities = opportunities.slice(0, 30);
-  
-  return topOpportunities.map((opp: any) => {
+  return opportunities.slice(0, 30).map((opp: any) => {
     const score = calculateBasicScore(user.skills || [], opp.skills);
     const userSkills = user.skills?.map((s: string) => s.toLowerCase()) || [];
     const oppSkills = opp.skills?.map((s: string) => s.toLowerCase()) || [];

@@ -4,7 +4,6 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import styles from './page.module.css';
-import Footer from '@/src/components/Footer/Footer';
 
 export default function DashboardPage() {
   const { user, loading, logout, updateUser } = useAuth();
@@ -338,7 +337,6 @@ export default function DashboardPage() {
           </div>
         </div>
       </div>
-      <Footer/>
     </>
   );
 }
