@@ -151,8 +151,7 @@ async function fetchGlobalGivingProjects(): Promise<Project[]> {
       headers: { 
         'Accept': 'application/json',
         'Content-Type': 'application/json'
-      },
-      next: { revalidate: 3600 }
+      }
     });
 
     if (!response.ok) {
