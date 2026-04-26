@@ -115,7 +115,6 @@ export default function Navbar() {
                 className={styles.mobileLogoImage}
               />
             </div>
-            <button className={styles.closeButton} onClick={closeMenu}>✕</button>
           </div>
           
           <div className={styles.mobileMenuLinks}>

@@ -6,7 +6,7 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    console.log('🔍 FETCHING SINGLE MATCH:', params.id);
+    console.log('🔍 FETCHING SINGLE MATCH, ID:', params.id);
     
     // 1. Autenticação
     let token = request.cookies.get('auth_token')?.value;
@@ -19,6 +19,7 @@ export async function GET(
     }
 
     if (!token) {
+      console.log('❌ No token found');
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -27,50 +28,14 @@ export async function GET(
 
     const decoded = verifyToken(token);
     if (!decoded) {
+      console.log('❌ Invalid token');
       return NextResponse.json(
         { error: 'Invalid token' },
         { status: 401 }
       );
     }
 
-    // 2. Buscar todos os matches da API principal
-    const apiKey = process.env.GLOBAL_GIVING_API_KEY;
-    
-    if (!apiKey) {
-      return NextResponse.json(
-        { error: 'API key not configured' },
-        { status: 500 }
-      );
-    }
-
-    // Buscar projetos da GlobalGiving
-    const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}`;
-    const response = await fetch(url, {
-      headers: { 'Accept': 'application/json' },
-      cache: 'no-store'
-    });
-
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: 'Failed to fetch projects' },
-        { status: 500 }
-      );
-    }
-
-    const data = await response.json();
-    const projects = data.projects?.project || [];
-    
-    // Encontrar o projeto específico pelo ID
-    const project = projects.find((p: any) => p.id === params.id);
-    
-    if (!project) {
-      return NextResponse.json(
-        { error: 'Opportunity not found' },
-        { status: 404 }
-      );
-    }
-
-    // Buscar perfil do usuário para calcular match
+    // 2. Buscar perfil do usuário
     const { prisma } = await import('@/src/lib/prisma');
     
     const user = await prisma.volunteer.findUnique({
@@ -86,11 +51,57 @@ export async function GET(
     });
 
     if (!user) {
+      console.log('❌ User not found');
       return NextResponse.json(
         { error: 'User not found' },
         { status: 404 }
       );
     }
+
+    // 3. Buscar projetos da GlobalGiving
+    const apiKey = process.env.GLOBAL_GIVING_API_KEY;
+    
+    if (!apiKey) {
+      console.log('❌ API key not configured');
+      return NextResponse.json(
+        { error: 'API key not configured' },
+        { status: 500 }
+      );
+    }
+
+    // Buscar projetos ativos no Brasil
+    const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}`;
+    console.log('📡 Fetching projects from GlobalGiving...');
+    
+    const response = await fetch(url, {
+      headers: { 'Accept': 'application/json' },
+      cache: 'no-store'
+    });
+
+    if (!response.ok) {
+      console.log('❌ GlobalGiving API error:', response.status);
+      return NextResponse.json(
+        { error: 'Failed to fetch projects from GlobalGiving' },
+        { status: 500 }
+      );
+    }
+
+    const data = await response.json();
+    const projects = data.projects?.project || [];
+    console.log(`✅ Found ${projects.length} projects from GlobalGiving`);
+
+    // Encontrar o projeto específico pelo ID (comparando como string)
+    const project = projects.find((p: any) => String(p.id) === String(params.id));
+    
+    if (!project) {
+      console.log(`❌ Project with ID ${params.id} not found`);
+      return NextResponse.json(
+        { error: 'Opportunity not found' },
+        { status: 404 }
+      );
+    }
+
+    console.log(`✅ Found project: ${project.title}`);
 
     // Extrair skills do projeto
     const projectSkills = extractSkillsFromProject(project);
@@ -107,11 +118,11 @@ export async function GET(
     const priority: 'high' | 'medium' | 'low' = matchScore >= 70 ? 'high' : matchScore >= 40 ? 'medium' : 'low';
 
     const opportunity = {
-      id: project.id,
+      id: String(project.id),
       title: project.title || 'Projeto de Voluntariado',
       organization: project.organization?.name || 'GlobalGiving Partner',
       location: `${project.location?.city || 'Brasil'}, ${project.location?.country || 'BR'}`,
-      description: project.summary || project.description || '',
+      description: project.summary || project.description || 'Projeto que busca voluntários para causas sociais',
       skills: projectSkills,
       matchScore: matchScore,
       matchedSkills: matchedSkills,
@@ -123,13 +134,15 @@ export async function GET(
       projectLink: project.projectLink
     };
 
+    console.log(`✅ Returning opportunity with match score: ${matchScore}%`);
+    
     return NextResponse.json({
       success: true,
       opportunity: opportunity
     });
 
   } catch (error: any) {
-    console.error('Error fetching match detail:', error);
+    console.error('❌ Error fetching match detail:', error);
     return NextResponse.json(
       { error: error.message || 'Internal server error' },
       { status: 500 }
@@ -164,8 +177,8 @@ function extractSkillsFromProject(project: any): string[] {
 }
 
 function calculateMatchScore(userSkills: string[], projectSkills: string[]): number {
-  if (!userSkills.length) return 30;
-  if (!projectSkills.length) return 40;
+  if (!userSkills || userSkills.length === 0) return 30;
+  if (!projectSkills || projectSkills.length === 0) return 40;
   
   const userSkillsLower = userSkills.map((s: string) => s.toLowerCase());
   const projectSkillsLower = projectSkills.map((s: string) => s.toLowerCase());
@@ -185,11 +198,14 @@ function calculateMatchScore(userSkills: string[], projectSkills: string[]): num
 }
 
 function findMatchingSkills(userSkills: string[], projectSkills: string[]): string[] {
+  if (!userSkills || !projectSkills) return [];
+  
   const matches: string[] = [];
   const userSkillsLower = userSkills.map(s => s.toLowerCase());
   
   for (const projSkill of projectSkills) {
-    if (userSkillsLower.some(us => us.includes(projSkill.toLowerCase()) || projSkill.toLowerCase().includes(us))) {
+    const projSkillLower = projSkill.toLowerCase();
+    if (userSkillsLower.some(us => us.includes(projSkillLower) || projSkillLower.includes(us))) {
       matches.push(projSkill);
     }
   }
@@ -198,11 +214,14 @@ function findMatchingSkills(userSkills: string[], projectSkills: string[]): stri
 }
 
 function findMissingSkills(userSkills: string[], projectSkills: string[]): string[] {
+  if (!userSkills || !projectSkills) return [];
+  
   const missing: string[] = [];
   const userSkillsLower = userSkills.map(s => s.toLowerCase());
   
   for (const projSkill of projectSkills) {
-    if (!userSkillsLower.some(us => us.includes(projSkill.toLowerCase()) || projSkill.toLowerCase().includes(us))) {
+    const projSkillLower = projSkill.toLowerCase();
+    if (!userSkillsLower.some(us => us.includes(projSkillLower) || projSkillLower.includes(us))) {
       missing.push(projSkill);
     }
   }
@@ -212,7 +231,7 @@ function findMissingSkills(userSkills: string[], projectSkills: string[]): strin
 
 function generateReasoning(score: number, matchedSkills: string[], title: string): string {
   if (score >= 70 && matchedSkills.length > 0) {
-    return `Excelente compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são diretamente relevantes para o projeto "${title}". Você tem um perfortil muito alinhado com as necessidades desta organização.`;
+    return `Excelente compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são diretamente relevantes para o projeto "${title}". Você tem um perfil muito alinhado com as necessidades desta organização.`;
   } else if (score >= 50) {
     if (matchedSkills.length > 0) {
       return `Boa compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são relevantes para este projeto. Considere se candidatar para aplicar seus conhecimentos.`;

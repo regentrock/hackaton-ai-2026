@@ -27,7 +27,7 @@ export default function RootLayout({
       <body>
         <AuthProvider>
           <Navbar />
-          <main style={{ minHeight: 'calc(100vh - 200px)' }}>
+          <main style={{ marginTop: '4rem' }}>
             {children}
           </main>
           <Footer />

@@ -123,21 +123,23 @@ export default function MatchesPage() {
   return (
     <div className={styles.pageContainer}>
       <div className={styles.container}>
+
         {/* Header */}
         <div className={styles.header}>
           <div className={styles.headerContent}>
+            <div className={styles.eyebrow}>Oportunidades para você</div>
             <h1 className={styles.title}>
-              Oportunidades para você
-              <span className={styles.titleHighlight}>baseadas no seu perfil</span>
+              Seu painel de matches
+              <span className={styles.titleHighlight}>baseado no seu perfil e habilidades</span>
             </h1>
             <p className={styles.subtitle}>
-              Nossa IA analisou suas habilidades e encontrou estas oportunidades
+              Nossa IA analisou seu perfil e selecionou as melhores oportunidades com base nas suas competências.
             </p>
           </div>
           {usingAI && (
             <div className={styles.aiBadge}>
               <i className="fas fa-brain"></i>
-              <span>Match realizado com IA WatsonX</span>
+              <span>Match por IA WatsonX</span>
             </div>
           )}
         </div>
@@ -149,11 +151,39 @@ export default function MatchesPage() {
               <i className="fas fa-code"></i>
               <span>Suas habilidades</span>
             </div>
+            <div className={styles.skillsDivider}></div>
             <div className={styles.skillsList}>
               {user.skills.map((skill: string, i: number) => (
                 <span key={i} className={styles.skillTag}>{skill}</span>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Stats Row */}
+        {matches.length > 0 && (
+          <div className={styles.statsRow}>
+            {highCount > 0 && (
+              <div className={styles.statPill}>
+                <span className={`${styles.statDot} ${styles.high}`}></span>
+                <strong>{highCount}</strong>
+                <span>alta compatibilidade</span>
+              </div>
+            )}
+            {mediumCount > 0 && (
+              <div className={styles.statPill}>
+                <span className={`${styles.statDot} ${styles.medium}`}></span>
+                <strong>{mediumCount}</strong>
+                <span>compatibilidade média</span>
+              </div>
+            )}
+            {lowCount > 0 && (
+              <div className={styles.statPill}>
+                <span className={`${styles.statDot} ${styles.low}`}></span>
+                <strong>{lowCount}</strong>
+                <span>em desenvolvimento</span>
+              </div>
+            )}
           </div>
         )}
 
@@ -216,96 +246,111 @@ export default function MatchesPage() {
           <div className={styles.cardsGrid}>
             {filteredMatches.map((match) => (
               <div key={match.id} className={`${styles.matchCard} ${styles[match.priority]}`}>
-                <div className={styles.cardHeader}>
-                  <div className={styles.cardHeaderLeft}>
-                    <div className={styles.organizationIcon}>
-                      <i className="fas fa-building"></i>
-                    </div>
-                    <div>
-                      <h3 className={styles.cardTitle}>{match.title}</h3>
-                      <p className={styles.organization}>{match.organization}</p>
-                    </div>
-                  </div>
-                  <div className={`${styles.scoreBadge} ${getScoreClass(match.matchScore)}`}>
-                    <span className={styles.scoreValue}>{match.matchScore}%</span>
-                    <span className={styles.scoreLabel}>match</span>
-                  </div>
-                </div>
+                
+                {/* Priority stripe */}
+                <div className={styles.cardStripe}></div>
 
-                <div className={styles.cardMeta}>
-                  <span className={styles.metaItem}>
-                    <i className="fas fa-map-marker-alt"></i>
-                    {match.location}
-                  </span>
-                  {match.theme && (
+                <div className={styles.cardInner}>
+                  {/* Header */}
+                  <div className={styles.cardHeader}>
+                    <div className={styles.cardHeaderLeft}>
+                      <div className={styles.organizationIcon}>
+                        <i className="fas fa-building"></i>
+                      </div>
+                      <div className={styles.cardTitleGroup}>
+                        <h3 className={styles.cardTitle}>{match.title}</h3>
+                        <p className={styles.organization}>{match.organization}</p>
+                      </div>
+                    </div>
+                    <div className={`${styles.scoreBadge} ${styles[getScoreClass(match.matchScore)]}`}>
+                      <span className={styles.scoreValue}>{match.matchScore}%</span>
+                      <span className={styles.scoreLabel}>match</span>
+                    </div>
+                  </div>
+
+                  {/* Meta */}
+                  <div className={styles.cardMeta}>
                     <span className={styles.metaItem}>
-                      <i className="fas fa-tag"></i>
-                      {match.theme}
+                      <i className="fas fa-map-marker-alt"></i>
+                      {match.location}
                     </span>
+                    {match.theme && (
+                      <span className={styles.metaItem}>
+                        <i className="fas fa-tag"></i>
+                        {match.theme}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Description */}
+                  <p className={styles.cardDescription}>{match.description?.substring(0, 120)}...</p>
+
+                  {/* Matched Skills */}
+                  {match.matchedSkills && match.matchedSkills.length > 0 && (
+                    <div className={styles.sectionBlock}>
+                      <div className={styles.sectionTitle}>
+                        <i className="fas fa-check-circle"></i>
+                        <span>Habilidades que combinam</span>
+                      </div>
+                      <div className={styles.skillsGroup}>
+                        {match.matchedSkills.map((skill, i) => (
+                          <span key={i} className={`${styles.skill} ${styles.skillMatch}`}>{skill}</span>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                </div>
 
-                <p className={styles.cardDescription}>{match.description?.substring(0, 120)}...</p>
-
-                {match.matchedSkills && match.matchedSkills.length > 0 && (
-                  <div className={styles.sectionBlock}>
-                    <div className={styles.sectionTitle}>
-                      <i className="fas fa-check-circle"></i>
-                      <span>Suas habilidades que combinam</span>
+                  {/* Missing Skills */}
+                  {match.missingSkills && match.missingSkills.length > 0 && (
+                    <div className={styles.sectionBlock}>
+                      <div className={styles.sectionTitle}>
+                        <i className="fas fa-lightbulb"></i>
+                        <span>Habilidades para desenvolver</span>
+                      </div>
+                      <div className={styles.skillsGroup}>
+                        {match.missingSkills.slice(0, 3).map((skill, i) => (
+                          <span key={i} className={`${styles.skill} ${styles.skillMissing}`}>{skill}</span>
+                        ))}
+                      </div>
                     </div>
-                    <div className={styles.skillsGroup}>
-                      {match.matchedSkills.map((skill, i) => (
-                        <span key={i} className={`${styles.skill} ${styles.skillMatch}`}>{skill}</span>
-                      ))}
+                  )}
+
+                  {/* Reasoning */}
+                  <div className={styles.reasoningBlock}>
+                    <i className="fas fa-quote-left"></i>
+                    <p>{match.reasoning}</p>
+                  </div>
+
+                  {/* Recommendation */}
+                  <div className={styles.recommendationBlock}>
+                    <i className="fas fa-gem"></i>
+                    <div>
+                      <strong>Recomendação</strong>
+                      <p>{match.recommendation}</p>
                     </div>
                   </div>
-                )}
 
-                {match.missingSkills && match.missingSkills.length > 0 && (
-                  <div className={styles.sectionBlock}>
-                    <div className={styles.sectionTitle}>
-                      <i className="fas fa-lightbulb"></i>
-                      <span>Habilidades para desenvolver</span>
-                    </div>
-                    <div className={styles.skillsGroup}>
-                      {match.missingSkills.slice(0, 3).map((skill, i) => (
-                        <span key={i} className={`${styles.skill} ${styles.skillMissing}`}>{skill}</span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className={styles.reasoningBlock}>
-                  <i className="fas fa-quote-left"></i>
-                  <p>{match.reasoning}</p>
-                </div>
-
-                <div className={styles.recommendationBlock}>
-                  <i className="fas fa-gem"></i>
-                  <div>
-                    <strong>Recomendação</strong>
-                    <p>{match.recommendation}</p>
+                  {/* Actions */}
+                  <div className={styles.actionButtons}>
+                    <button className={styles.interestButton}>
+                      <i className="fas fa-heart"></i>
+                      Tenho interesse
+                    </button>
+                    <button 
+                      onClick={() => router.push(`/matches/${match.id}`)}
+                      className={styles.detailsButton}
+                    >
+                      <i className="fas fa-arrow-right"></i>
+                      Mais detalhes
+                    </button>
                   </div>
                 </div>
 
-                {/* Botões de ação - adicionado botão "Mais detalhes" */}
-                <div className={styles.actionButtons}>
-                  <button className={styles.interestButton}>
-                    <i className="fas fa-heart"></i>
-                    Tenho interesse
-                  </button>
-                  <button 
-                    onClick={() => router.push(`/matches/${match.id}`)}
-                    className={styles.detailsButton}
-                  >
-                    <i className="fas fa-info-circle"></i>
-                    Mais detalhes
-                  </button>
-                </div>
               </div>
             ))}
           </div>
         )}
+
       </div>
     </div>
   );
