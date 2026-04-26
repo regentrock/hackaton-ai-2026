@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import styles from './page.module.css';
-import '@fortawesome/fontawesome-free/css/all.min.css';
+import styles from './page.module.css'; 
 
 interface Match {
   id: string;
