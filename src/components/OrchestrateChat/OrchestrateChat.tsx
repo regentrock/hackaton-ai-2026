@@ -20,20 +20,35 @@ export default function OrchestrateChat({ agentId, orchestrationId }: Orchestrat
   const { user } = useAuth();
   const chatInitialized = useRef(false);
 
+  // Função para obter o token de autenticação
+  const getAuthToken = () => {
+    // Pegar o token dos cookies (ou de onde você armazena)
+    const cookies = document.cookie.split(';');
+    const authCookie = cookies.find(c => c.trim().startsWith('auth_token='));
+    if (authCookie) {
+      return authCookie.split('=')[1];
+    }
+    return null;
+  };
+
   useEffect(() => {
     if (chatInitialized.current) return;
     if (!user) return;
     
     chatInitialized.current = true;
 
-    // 🔥 CONFIGURAÇÃO COM userContext 🔥
+    const authToken = getAuthToken();
+    console.log('🎯 Inicializando chat com token:', authToken ? 'Token presente' : 'Sem token');
+
+    // Configurar o chat do Orchestrate COM contexto do usuário
     window.wxOConfiguration = {
       orchestrationID: orchestrationId,
       hostURL: "https://dl.watson-orchestrate.ibm.com",
       rootElementID: "orchestrate-chat-root",
       chatOptions: {
         agentId: agentId,
-        // 🔥 AQUI está o userContext 🔥
+        // 🔥 Adicionar token de autenticação 🔥
+        authToken: authToken || undefined,
         userContext: {
           userId: user.id,
           userName: user.name,
@@ -55,6 +70,9 @@ export default function OrchestrateChat({ agentId, orchestrationId }: Orchestrat
         window.wxoLoader.init();
         console.log('✅ Chat inicializado com userContext:', user.name);
       }
+    };
+    script.onerror = () => {
+      console.error('❌ Erro ao carregar o chat do Orchestrate');
     };
     document.head.appendChild(script);
 
