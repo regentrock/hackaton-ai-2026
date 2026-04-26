@@ -861,6 +861,21 @@
   box-shadow: 0 8px 20px rgba(176, 38, 41, 0.25);
 }
 
+/* Adicione ao final do arquivo */
+.interestButton.saved {
+  background: #10b981;
+  border-color: #10b981;
+}
+
+.interestButton.saved i {
+  color: white;
+}
+
+.interestButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
 /* =========================
    RESPONSIVE
 ========================= */

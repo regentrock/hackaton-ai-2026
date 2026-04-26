@@ -29,6 +29,7 @@ export default function MatchesPage() {
   const [error, setError] = useState<string | null>(null);
   const [usingAI, setUsingAI] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [savingId, setSavingId] = useState<string | null>(null);
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
@@ -80,6 +81,56 @@ export default function MatchesPage() {
       setError(err.message || 'Erro ao carregar oportunidades');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function handleSaveOpportunity(match: Match) {
+    if (savingId === match.id) return;
+    
+    setSavingId(match.id);
+    
+    try {
+      const res = await fetch('/api/user/saved', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          opportunityId: match.id,
+          title: match.title,
+          organization: match.organization,
+          location: match.location,
+          description: match.description,
+          skills: match.skills,
+          theme: match.theme,
+          matchScore: match.matchScore,
+          projectLink: match.projectLink
+        })
+      });
+
+      const data = await res.json();
+      
+      if (data.success) {
+        // Feedback visual - mudar cor do botão temporariamente
+        const button = document.getElementById(`save-btn-${match.id}`);
+        if (button) {
+          button.innerHTML = '<i class="fas fa-check"></i> Salvo!';
+          button.classList.add(styles.saved);
+          setTimeout(() => {
+            button.innerHTML = '<i class="fas fa-heart"></i> Tenho interesse';
+            button.classList.remove(styles.saved);
+          }, 2000);
+        }
+        console.log('✅ Oportunidade salva com sucesso');
+      } else {
+        alert('Erro ao salvar: ' + (data.error || 'Tente novamente'));
+      }
+    } catch (error) {
+      console.error('❌ Error saving opportunity:', error);
+      alert('Erro ao salvar oportunidade. Tente novamente.');
+    } finally {
+      setSavingId(null);
     }
   }
 
@@ -332,9 +383,14 @@ export default function MatchesPage() {
 
                   {/* Actions */}
                   <div className={styles.actionButtons}>
-                    <button className={styles.interestButton}>
+                    <button 
+                      id={`save-btn-${match.id}`}
+                      onClick={() => handleSaveOpportunity(match)}
+                      disabled={savingId === match.id}
+                      className={styles.interestButton}
+                    >
                       <i className="fas fa-heart"></i>
-                      Tenho interesse
+                      {savingId === match.id ? 'Salvando...' : 'Tenho interesse'}
                     </button>
                     <button 
                       onClick={() => router.push(`/matches/${match.id}`)}
