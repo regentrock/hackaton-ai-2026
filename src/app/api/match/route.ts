@@ -91,7 +91,7 @@ export async function GET(request: NextRequest) {
     console.log(`   - Disponibilidade: ${user.availability || 'Não informada'}`);
 
     // =========================
-    // 3. BUSCAR OPORTUNIDADES
+    // 3. BUSCAR OPORTUNIDADES (COM PAGINAÇÃO)
     // =========================
     console.log('\n🌍 [3/5] Buscando oportunidades da GlobalGiving...');
     
@@ -146,14 +146,16 @@ export async function GET(request: NextRequest) {
     const executionTime = Date.now() - startTime;
     console.log(`\n✨ ========== MATCH API FINALIZADA ==========`);
     console.log(`⏱️  Tempo total: ${executionTime}ms`);
-    console.log(`🎯 Resultados: ${matches.length} oportunidades`);
+    console.log(`📊 Base analisada: ${opportunities.length} projetos`);
+    console.log(`🎯 Resultados: ${matches.length} matches calculados`);
     console.log(`🤖 IA utilizada: ${hasWatsonX ? '✅ SIM (WatsonX)' : '❌ NÃO (Fallback)'}`);
-    console.log(`📈 Top score: ${matches[0]?.matchScore || 0}%\n`);
+    console.log(`📈 Retornando: ${Math.min(matches.length, 10)} melhores matches\n`);
     
     return NextResponse.json({
       success: true,
-      matches: matches.slice(0, 15),
+      matches: matches.slice(0, 10), // Retorna os 10 melhores matches
       total: matches.length,
+      totalAnalyzed: opportunities.length, // Quantos foram analisados
       usingAI: hasWatsonX,
       userSkills: user.skills || [],
       timestamp: new Date().toISOString()
@@ -179,25 +181,57 @@ async function fetchFreshOpportunities(user: any): Promise<any[]> {
   }
 
   try {
-    const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}`;
+    let allProjects: any[] = [];
+    let nextProjectId: string | null = null;
+    let pageCount = 0;
+    const MAX_PAGES = 5; // Buscar até 5 páginas
+    const PROJECTS_PER_PAGE = 50; // ~50 por página
     
-    const response = await fetch(url, {
-      headers: { 'Accept': 'application/json' },
-      cache: 'no-store'
-    });
-
-    if (!response.ok) {
-      console.error(`   ❌ GlobalGiving API erro: ${response.status}`);
-      return [];
+    console.log(`   🔍 Buscando projetos em até ${MAX_PAGES} páginas...`);
+    
+    while (pageCount < MAX_PAGES) {
+      let url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}`;
+      if (nextProjectId) {
+        url += `&nextProjectId=${nextProjectId}`;
+      }
+      
+      const response = await fetch(url, {
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+      });
+      
+      if (!response.ok) {
+        console.error(`   ❌ GlobalGiving API erro página ${pageCount + 1}: ${response.status}`);
+        break;
+      }
+      
+      const data = await response.json();
+      const projects = data.projects?.project || [];
+      allProjects = [...allProjects, ...projects];
+      
+      // Verificar se há mais páginas
+      const hasNext = data.projects?.hasNext === 'true' || data.projects?.hasNext === true;
+      nextProjectId = data.projects?.nextProjectId || null;
+      
+      pageCount++;
+      console.log(`   📄 Página ${pageCount}: +${projects.length} projetos (total: ${allProjects.length})`);
+      
+      if (!hasNext || !nextProjectId) {
+        console.log(`   📄 Fim da paginação na página ${pageCount}`);
+        break;
+      }
+      
+      // Pequena pausa entre páginas
+      await new Promise(resolve => setTimeout(resolve, 200));
     }
-
-    const data = await response.json();
-    const projects = data.projects?.project || [];
     
-    console.log(`   ✅ ${projects.length} projetos recebidos da GlobalGiving`);
+    console.log(`   ✅ TOTAL: ${allProjects.length} projetos recebidos da GlobalGiving`);
     
-    // Extrair skills de cada projeto
-    const enrichedProjects = projects.slice(0, 50).map((project: any) => ({
+    // Analisar TODOS os projetos coletados (até 250)
+    const projectsToAnalyze = allProjects.slice(0, 250);
+    console.log(`   🔍 Analisando ${projectsToAnalyze.length} projetos (máximo 250 para performance)`);
+    
+    const enrichedProjects = projectsToAnalyze.map((project: any) => ({
       id: project.id,
       title: project.title || 'Projeto de Voluntariado',
       organization: project.organization?.name || 'GlobalGiving Partner',
@@ -208,8 +242,11 @@ async function fetchFreshOpportunities(user: any): Promise<any[]> {
       url: project.projectLink
     }));
     
-    console.log(`   📋 ${enrichedProjects.length} projetos enriquecidos com skills`);
-    return enrichedProjects;
+    // Filtrar projetos sem skills para otimizar análise
+    const projectsWithSkills = enrichedProjects.filter(p => p.skills.length > 0);
+    console.log(`   🎯 ${projectsWithSkills.length} projetos com skills identificadas (${enrichedProjects.length - projectsWithSkills.length} sem skills)`);
+    
+    return projectsWithSkills;
     
   } catch (error) {
     console.error('   ❌ Erro ao buscar oportunidades:', error);
@@ -221,19 +258,32 @@ function extractRelevantSkills(project: any, userSkills: string[]): string[] {
   const skills: string[] = [];
   const text = `${project.title || ''} ${project.summary || ''} ${project.description || ''} ${project.themeName || ''}`.toLowerCase();
   
-  // Mapeamento de palavras-chave para habilidades (apenas para enriquecimento básico)
+  // Mapeamento de palavras-chave para habilidades
   const skillMap = [
-    { keywords: ['ensin', 'educa', 'profess', 'escola', 'criança', 'alfabetizacao', 'pedagogia'], skill: 'Educação' },
-    { keywords: ['ingles', 'english', 'idioma', 'lingua'], skill: 'Inglês' },
-    { keywords: ['programa', 'codigo', 'software', 'web', 'desenvolvimento', 'tecnologia'], skill: 'Programação' },
-    { keywords: ['saude', 'medicina', 'enfermagem', 'cuidado', 'bem-estar'], skill: 'Saúde' },
-    { keywords: ['ambiente', 'ecologia', 'sustentabilidade', 'reciclagem'], skill: 'Meio Ambiente' },
-    { keywords: ['social', 'comunidade', 'assistencia', 'voluntariado', 'familia'], skill: 'Ação Social' }
+    { keywords: ['ensin', 'educa', 'profess', 'escola', 'criança', 'alfabetizacao', 'pedagogia', 'aula', 'formacao'], skill: 'Educação' },
+    { keywords: ['ingles', 'english', 'idioma', 'lingua', 'foreign language'], skill: 'Inglês' },
+    { keywords: ['programa', 'codigo', 'software', 'web', 'desenvolvimento', 'tecnologia', 'tech', 'desenvolver'], skill: 'Programação' },
+    { keywords: ['saude', 'medicina', 'enfermagem', 'cuidado', 'bem-estar', 'hospital'], skill: 'Saúde' },
+    { keywords: ['ambiente', 'ecologia', 'sustentabilidade', 'reciclagem', 'natureza'], skill: 'Meio Ambiente' },
+    { keywords: ['social', 'comunidade', 'assistencia', 'voluntariado', 'familia'], skill: 'Ação Social' },
+    { keywords: ['cultura', 'arte', 'teatro', 'musica', 'danca', 'oficina'], skill: 'Arte e Cultura' },
+    { keywords: ['esporte', 'futebol', 'atividade fisica', 'recreacao'], skill: 'Esportes' },
+    { keywords: ['cozinha', 'alimentacao', 'culinaria', 'refeicao'], skill: 'Culinária' }
   ];
   
   for (const item of skillMap) {
     if (item.keywords.some((kw: string) => text.includes(kw))) {
       skills.push(item.skill);
+    }
+  }
+  
+  // Adicionar skills baseadas nas skills do usuário para melhor match
+  if (userSkills && userSkills.length > 0) {
+    for (const userSkill of userSkills) {
+      const userSkillLower = userSkill.toLowerCase();
+      if (text.includes(userSkillLower) && !skills.includes(userSkill)) {
+        skills.push(userSkill);
+      }
     }
   }
   
@@ -251,6 +301,7 @@ async function performIntelligentMatching(
 ): Promise<MatchResult[]> {
   console.log('\n🤖 INICIANDO ANÁLISE INTELIGENTE...');
   console.log(`🎯 Skills do usuário para análise: ${user.skills?.join(', ') || 'NENHUMA'}`);
+  console.log(`📊 Total de oportunidades a serem analisadas: ${opportunities.length}`);
   
   const results: MatchResult[] = [];
   const batchSize = hasWatsonX ? 3 : 5; // Menor batch para WatsonX para melhor qualidade
