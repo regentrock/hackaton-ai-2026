@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useEffect, useState } from 'react';
 import styles from './page.module.css';
+import FloatingChatButton from '../components/OrchestrateChat/FloatingChatButton';
 
 export default function HomePage() {
   const router = useRouter();
@@ -299,6 +300,7 @@ export default function HomePage() {
           <p className={styles.ctaNote}>✓ Sem compromisso • ✓ 100% gratuito • ✓ Cancelamento a qualquer momento</p>
         </div>
       </section>
+      <FloatingChatButton/>
     </div>
   );
 }
