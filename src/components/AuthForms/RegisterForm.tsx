@@ -49,6 +49,7 @@ export default function RegisterForm() {
         skills: [...formData.skills, skillInput.trim()]
       });
       setSkillInput('');
+      setError(''); // Limpa erro ao adicionar skill
     }
   };
 
@@ -57,11 +58,26 @@ export default function RegisterForm() {
       ...formData,
       skills: formData.skills.filter(s => s !== skill)
     });
+    setError(''); // Limpa erro ao remover skill
+  };
+
+  const validateSkills = (): boolean => {
+    if (formData.skills.length < 3) {
+      setError(`Você precisa adicionar pelo menos 3 habilidades. Atualmente: ${formData.skills.length}/3`);
+      return false;
+    }
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    
+    // Validar habilidades antes de enviar
+    if (!validateSkills()) {
+      return;
+    }
+    
     setLoading(true);
 
     try {
@@ -74,6 +90,8 @@ export default function RegisterForm() {
       setLoading(false);
     }
   };
+
+  const skillsRemaining = 3 - formData.skills.length;
 
   return (
     <div className={styles.authWrapper}>
@@ -168,7 +186,28 @@ export default function RegisterForm() {
             </div>
 
             <div className={styles.group}>
-              <label className={styles.label}>Habilidades</label>
+              <label className={styles.label}>
+                Habilidades * 
+                <span style={{ 
+                  fontSize: '0.7rem', 
+                  color: formData.skills.length >= 3 ? '#22c55e' : '#e53e3e',
+                  marginLeft: '0.5rem'
+                }}>
+                  ({formData.skills.length}/3 mínimo)
+                </span>
+              </label>
+              
+              {/* Contador visual de habilidades restantes */}
+              {skillsRemaining > 0 && formData.skills.length > 0 && (
+                <div style={{ 
+                  fontSize: '0.7rem', 
+                  color: '#f59e0b', 
+                  marginBottom: '0.5rem' 
+                }}>
+                  Faltam {skillsRemaining} habilidade{skillsRemaining !== 1 ? 's' : ''} para o mínimo
+                </div>
+              )}
+              
               <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
                 <input
                   type="text"
@@ -201,12 +240,22 @@ export default function RegisterForm() {
                   </span>
                 ))}
               </div>
+              {formData.skills.length === 0 && (
+                <p style={{ fontSize: '0.7rem', color: '#999', marginTop: '0.5rem' }}>
+                  ⚠️ Adicione pelo menos 3 habilidades para encontrar as melhores oportunidades
+                </p>
+              )}
             </div>
 
             <button
               type="submit"
               disabled={loading}
               className={styles.primaryButton}
+              style={{
+                opacity: formData.skills.length < 3 ? 0.6 : 1,
+                cursor: formData.skills.length < 3 ? 'not-allowed' : 'pointer'
+              }}
+              title={formData.skills.length < 3 ? `Adicione mais ${skillsRemaining} habilidade(s)` : ''}
             >
               {loading ? 'Criando conta...' : 'Criar conta gratuitamente'}
             </button>
@@ -236,6 +285,21 @@ export default function RegisterForm() {
             <div className={styles.imageSubtitle}>
               Ao se cadastrar, você terá acesso a oportunidades exclusivas
             </div>
+            
+            <ul className={styles.statList}>
+              <li>
+                <span className={styles.checkIcon}>✓</span>
+                <span>+15.000 voluntários ativos</span>
+              </li>
+              <li>
+                <span className={styles.checkIcon}>✓</span>
+                <span>Match inteligente com IA</span>
+              </li>
+              <li>
+                <span className={styles.checkIcon}>✓</span>
+                <span>Oportunidades personalizadas</span>
+              </li>
+            </ul>
           </div>
         </div>
       </div>

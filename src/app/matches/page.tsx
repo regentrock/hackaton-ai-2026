@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css'; 
+import '@fortawesome/fontawesome-free/css/all.min.css';
 
 interface Match {
   id: string;
@@ -287,10 +288,20 @@ export default function MatchesPage() {
                   </div>
                 </div>
 
-                <button className={styles.interestButton}>
-                  <i className="fas fa-heart"></i>
-                  Tenho interesse
-                </button>
+                {/* Botões de ação - adicionado botão "Mais detalhes" */}
+                <div className={styles.actionButtons}>
+                  <button className={styles.interestButton}>
+                    <i className="fas fa-heart"></i>
+                    Tenho interesse
+                  </button>
+                  <button 
+                    onClick={() => router.push(`/matches/${match.id}`)}
+                    className={styles.detailsButton}
+                  >
+                    <i className="fas fa-info-circle"></i>
+                    Mais detalhes
+                  </button>
+                </div>
               </div>
             ))}
           </div>
