@@ -22,37 +22,93 @@ export async function GET(request: NextRequest) {
   
   try {
     // =========================
-    // 1. AUTENTICAÇÃO
+    // 1. IDENTIFICAR SE É ORCHESTRATE
     // =========================
-    console.log('🔐 [1/5] Verificando autenticação...');
+    const userAgent = request.headers.get('user-agent') || '';
+    const isOrchestrate = userAgent.includes('Orchestrate') || 
+                          userAgent.includes('watsonx') ||
+                          request.headers.get('referer')?.includes('orchestrate') ||
+                          request.headers.get('origin')?.includes('orchestrate');
     
-    let token = request.cookies.get('auth_token')?.value;
+    let userId: string | null = null;
+    let isOrchestrateCall = false;
     
-    if (!token) {
-      const authHeader = request.headers.get('authorization');
-      if (authHeader && authHeader.startsWith('Bearer ')) {
-        token = authHeader.split(' ')[1];
-        console.log('📌 Token obtido do header Authorization');
+    console.log(`📱 User-Agent: ${userAgent.substring(0, 100)}`);
+    console.log(`🤖 Is Orchestrate: ${isOrchestrate}`);
+    
+    // Se for Orchestrate, usar um usuário demo
+    if (isOrchestrate) {
+      isOrchestrateCall = true;
+      console.log('🤖 Chamada identificada do watsonx Orchestrate');
+      
+      const { prisma } = await import('@/src/lib/prisma');
+      
+      // Buscar um usuário existente para demonstração
+      const demoUser = await prisma.volunteer.findFirst({
+        where: { email: { contains: 'demo' } }
+      });
+      
+      if (!demoUser) {
+        // Se não encontrar usuário demo, pegar o primeiro usuário
+        const firstUser = await prisma.volunteer.findFirst();
+        if (firstUser) {
+          userId = firstUser.id;
+          console.log('📌 Usando primeiro usuário:', firstUser.email);
+        }
       } else {
-        console.log('❌ Nenhum token encontrado');
+        userId = demoUser.id;
+        console.log('📌 Usando usuário demo:', demoUser.email);
+      }
+      
+      if (!userId) {
+        console.log('❌ Nenhum usuário encontrado para demonstração');
         return NextResponse.json(
-          { error: 'Unauthorized' },
-          { status: 401 }
+          { error: 'Nenhum usuário encontrado para demonstração' },
+          { status: 404 }
         );
       }
     } else {
-      console.log('📌 Token obtido dos cookies');
+      // =========================
+      // AUTENTICAÇÃO NORMAL PARA WEB
+      // =========================
+      console.log('🔐 [1/5] Verificando autenticação...');
+      
+      let token = request.cookies.get('auth_token')?.value;
+      
+      if (!token) {
+        const authHeader = request.headers.get('authorization');
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+          token = authHeader.split(' ')[1];
+          console.log('📌 Token obtido do header Authorization');
+        } else {
+          console.log('❌ Nenhum token encontrado');
+          return NextResponse.json(
+            { error: 'Unauthorized' },
+            { status: 401 }
+          );
+        }
+      } else {
+        console.log('📌 Token obtido dos cookies');
+      }
+
+      const decoded = verifyToken(token);
+      if (!decoded) {
+        console.log('❌ Token inválido ou expirado');
+        return NextResponse.json(
+          { error: 'Invalid token' },
+          { status: 401 }
+        );
+      }
+      userId = decoded.userId;
+      console.log('✅ Token validado com sucesso para usuário ID:', userId);
     }
 
-    const decoded = verifyToken(token);
-    if (!decoded) {
-      console.log('❌ Token inválido ou expirado');
+    if (!userId) {
       return NextResponse.json(
-        { error: 'Invalid token' },
-        { status: 401 }
+        { error: 'User not found' },
+        { status: 404 }
       );
     }
-    console.log('✅ Token validado com sucesso para usuário ID:', decoded.userId);
 
     // =========================
     // 2. BUSCAR PERFIL DO USUÁRIO
@@ -62,7 +118,7 @@ export async function GET(request: NextRequest) {
     const { prisma } = await import('@/src/lib/prisma');
     
     const user = await prisma.volunteer.findUnique({
-      where: { id: decoded.userId },
+      where: { id: userId },
       select: {
         id: true,
         name: true,
@@ -151,15 +207,23 @@ export async function GET(request: NextRequest) {
     console.log(`🤖 IA utilizada: ${hasWatsonX ? '✅ SIM (WatsonX)' : '❌ NÃO (Fallback)'}`);
     console.log(`📈 Retornando: ${Math.min(matches.length, 10)} melhores matches\n`);
     
-    return NextResponse.json({
+    // Adicionar header para identificar origem da chamada
+    const response = NextResponse.json({
       success: true,
-      matches: matches.slice(0, 10), // Retorna os 10 melhores matches
+      matches: matches.slice(0, 10),
       total: matches.length,
-      totalAnalyzed: opportunities.length, // Quantos foram analisados
+      totalAnalyzed: opportunities.length,
       usingAI: hasWatsonX,
       userSkills: user.skills || [],
+      source: isOrchestrateCall ? 'orchestrate' : 'web',
       timestamp: new Date().toISOString()
     });
+    
+    if (isOrchestrateCall) {
+      response.headers.set('X-Source', 'VolunteerMatcher-Orchestrate');
+    }
+    
+    return response;
 
   } catch (error: any) {
     console.error('❌ ERRO FATAL NA MATCH API:', error);
@@ -184,8 +248,7 @@ async function fetchFreshOpportunities(user: any): Promise<any[]> {
     let allProjects: any[] = [];
     let nextProjectId: string | null = null;
     let pageCount = 0;
-    const MAX_PAGES = 5; // Buscar até 5 páginas
-    const PROJECTS_PER_PAGE = 50; // ~50 por página
+    const MAX_PAGES = 5;
     
     console.log(`   🔍 Buscando projetos em até ${MAX_PAGES} páginas...`);
     
@@ -209,7 +272,6 @@ async function fetchFreshOpportunities(user: any): Promise<any[]> {
       const projects = data.projects?.project || [];
       allProjects = [...allProjects, ...projects];
       
-      // Verificar se há mais páginas
       const hasNext = data.projects?.hasNext === 'true' || data.projects?.hasNext === true;
       nextProjectId = data.projects?.nextProjectId || null;
       
@@ -221,13 +283,11 @@ async function fetchFreshOpportunities(user: any): Promise<any[]> {
         break;
       }
       
-      // Pequena pausa entre páginas
       await new Promise(resolve => setTimeout(resolve, 200));
     }
     
     console.log(`   ✅ TOTAL: ${allProjects.length} projetos recebidos da GlobalGiving`);
     
-    // Analisar TODOS os projetos coletados (até 250)
     const projectsToAnalyze = allProjects.slice(0, 250);
     console.log(`   🔍 Analisando ${projectsToAnalyze.length} projetos (máximo 250 para performance)`);
     
@@ -242,9 +302,8 @@ async function fetchFreshOpportunities(user: any): Promise<any[]> {
       url: project.projectLink
     }));
     
-    // Filtrar projetos sem skills para otimizar análise
     const projectsWithSkills = enrichedProjects.filter(p => p.skills.length > 0);
-    console.log(`   🎯 ${projectsWithSkills.length} projetos com skills identificadas (${enrichedProjects.length - projectsWithSkills.length} sem skills)`);
+    console.log(`   🎯 ${projectsWithSkills.length} projetos com skills identificadas`);
     
     return projectsWithSkills;
     
@@ -258,7 +317,6 @@ function extractRelevantSkills(project: any, userSkills: string[]): string[] {
   const skills: string[] = [];
   const text = `${project.title || ''} ${project.summary || ''} ${project.description || ''} ${project.themeName || ''}`.toLowerCase();
   
-  // Mapeamento de palavras-chave para habilidades
   const skillMap = [
     { keywords: ['ensin', 'educa', 'profess', 'escola', 'criança', 'alfabetizacao', 'pedagogia', 'aula', 'formacao'], skill: 'Educação' },
     { keywords: ['ingles', 'english', 'idioma', 'lingua', 'foreign language'], skill: 'Inglês' },
@@ -277,7 +335,6 @@ function extractRelevantSkills(project: any, userSkills: string[]): string[] {
     }
   }
   
-  // Adicionar skills baseadas nas skills do usuário para melhor match
   if (userSkills && userSkills.length > 0) {
     for (const userSkill of userSkills) {
       const userSkillLower = userSkill.toLowerCase();
@@ -300,11 +357,11 @@ async function performIntelligentMatching(
   hasWatsonX: boolean
 ): Promise<MatchResult[]> {
   console.log('\n🤖 INICIANDO ANÁLISE INTELIGENTE...');
-  console.log(`🎯 Skills do usuário para análise: ${user.skills?.join(', ') || 'NENHUMA'}`);
-  console.log(`📊 Total de oportunidades a serem analisadas: ${opportunities.length}`);
+  console.log(`🎯 Skills do usuário: ${user.skills?.join(', ') || 'NENHUMA'}`);
+  console.log(`📊 Total de oportunidades: ${opportunities.length}`);
   
   const results: MatchResult[] = [];
-  const batchSize = hasWatsonX ? 3 : 5; // Menor batch para WatsonX para melhor qualidade
+  const batchSize = hasWatsonX ? 3 : 5;
   
   for (let i = 0; i < opportunities.length; i += batchSize) {
     const batch = opportunities.slice(i, i + batchSize);
@@ -324,7 +381,7 @@ async function performIntelligentMatching(
     console.log(`   ✅ Lote ${batchNum} concluído. Scores: ${batchResults.map(r => r.matchScore).join(', ')}%`);
     
     if (i + batchSize < opportunities.length) {
-      console.log(`   ⏳ Aguardando 500ms antes do próximo lote...`);
+      console.log(`   ⏳ Aguardando 500ms...`);
       await new Promise(resolve => setTimeout(resolve, 500));
     }
   }
@@ -338,21 +395,19 @@ async function analyzeMatchWithAI(
   hasWatsonX: boolean
 ): Promise<MatchResult> {
   if (hasWatsonX) {
-    console.log(`      🧠 Chamando WatsonX para análise profunda...`);
+    console.log(`      🧠 Chamando WatsonX...`);
     try {
       const aiResult = await callWatsonXForMatch(user, opportunity);
-      console.log(`      ✅ WatsonX retornou score: ${aiResult.matchScore}%`);
-      console.log(`      📝 Reason: ${aiResult.reasoning?.substring(0, 60)}...`);
+      console.log(`      ✅ Score: ${aiResult.matchScore}%`);
       return aiResult;
     } catch (error) {
       console.error(`      ❌ WatsonX falhou:`, error);
-      console.log(`      🔄 Usando fallback para esta oportunidade`);
       const basicScore = calculateBasicScore(user.skills || [], opportunity.skills);
       return createFallbackResult(opportunity, user, basicScore);
     }
   } else {
     const basicScore = calculateBasicScore(user.skills || [], opportunity.skills);
-    console.log(`      📊 Fallback score: ${basicScore}% (sem IA)`);
+    console.log(`      📊 Score: ${basicScore}% (fallback)`);
     return createFallbackResult(opportunity, user, basicScore);
   }
 }
@@ -360,7 +415,6 @@ async function analyzeMatchWithAI(
 async function callWatsonXForMatch(user: any, opportunity: any): Promise<MatchResult> {
   const startTime = Date.now();
   
-  // Obter token IAM
   const iamResponse = await fetch('https://iam.cloud.ibm.com/identity/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -374,31 +428,19 @@ async function callWatsonXForMatch(user: any, opportunity: any): Promise<MatchRe
   const iamData = await iamResponse.json();
   const accessToken = iamData.access_token;
   
-  // Prompt detalhado para o WatsonX
-  const prompt = `You are an expert volunteer-job matching AI. Analyze this match with extreme precision.
+  const prompt = `You are an expert volunteer-job matching AI. Analyze this match.
 
-=== VOLUNTEER SKILLS (CRITICAL) ===
-${user.skills?.map((s: string, i: number) => `${i+1}. ${s}`).join('\n') || 'No skills listed'}
+VOLUNTEER SKILLS: ${user.skills?.join(', ') || 'None'}
+OPPORTUNITY: ${opportunity.title}
+REQUIRED SKILLS: ${opportunity.skills?.join(', ') || 'Not specified'}
 
-=== OPPORTUNITY DETAILS ===
-Title: ${opportunity.title}
-Organization: ${opportunity.organization}
-Required Skills: ${opportunity.skills?.join(', ') || 'Not specified'}
-Description: ${opportunity.description?.substring(0, 500) || 'No description'}
-
-=== YOUR TASK ===
-1. Compare EACH volunteer skill with the opportunity requirements
-2. Calculate a precise match score (0-100) based on REAL skill overlap
-3. Identify EXACTLY which skills from the volunteer match
-4. Provide a personalized recommendation in Portuguese
-
-=== OUTPUT (JSON ONLY, no other text) ===
+Calculate match score (0-100). Return ONLY JSON:
 {
   "score": number,
-  "reasoning": "Em português: análise detalhada do match",
-  "matchedSkills": ["skill1", "skill2"],
-  "missingSkills": ["skill1", "skill2"],
-  "recommendation": "Em português: recomendação personalizada"
+  "reasoning": "em português",
+  "matchedSkills": [],
+  "missingSkills": [],
+  "recommendation": "em português"
 }`;
 
   const watsonResponse = await fetch(`${process.env.IBM_URL}/ml/v1/text/generation?version=2023-05-29`, {
@@ -413,9 +455,9 @@ Description: ${opportunity.description?.substring(0, 500) || 'No description'}
       project_id: process.env.IBM_PROJECT_ID,
       parameters: {
         decoding_method: "greedy",
-        max_new_tokens: 350,
+        max_new_tokens: 250,
         temperature: 0.2,
-        min_new_tokens: 80,
+        min_new_tokens: 50,
       },
     }),
   });
@@ -426,36 +468,30 @@ Description: ${opportunity.description?.substring(0, 500) || 'No description'}
 
   const data = await watsonResponse.json();
   const aiText = data.results[0].generated_text;
-  
-  // Parse da resposta da IA
   const cleanText = aiText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
   const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
   
   if (!jsonMatch) {
-    throw new Error('No JSON found in WatsonX response');
+    throw new Error('No JSON found');
   }
   
   const parsed = JSON.parse(jsonMatch[0]);
   
-  // Validar matchedSkills contra as skills reais do usuário
   const userSkillsLower = user.skills?.map((s: string) => s.toLowerCase()) || [];
   const validMatchedSkills = (parsed.matchedSkills || []).filter((skill: string) =>
-    userSkillsLower.some((us: string) => us.includes(skill.toLowerCase()) || skill.toLowerCase().includes(us))
+    userSkillsLower.some((us: string) => us.includes(skill.toLowerCase()))
   );
   
   let score = Math.min(100, Math.max(0, parsed.score || 50));
   
-  // Ajuste de score baseado em matched skills válidas
   if (validMatchedSkills.length > 0 && user.skills?.length > 0) {
     const skillMatchRatio = validMatchedSkills.length / Math.max(opportunity.skills?.length || 1, 1);
-    const adjustedScore = Math.min(100, Math.max(0, score * (0.7 + skillMatchRatio * 0.3)));
-    score = Math.floor(adjustedScore);
+    score = Math.floor(Math.min(100, Math.max(0, score * (0.7 + skillMatchRatio * 0.3))));
   }
   
   const priority: 'high' | 'medium' | 'low' = score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low';
   
-  const elapsed = Date.now() - startTime;
-  console.log(`         ⏱️  WatsonX análise em ${elapsed}ms`);
+  console.log(`         ⏱️ ${Date.now() - startTime}ms`);
   
   return {
     id: opportunity.id,
@@ -521,9 +557,9 @@ function createFallbackResult(opportunity: any, user: any, score: number): Match
 }
 
 function performFallbackMatching(user: any, opportunities: any[]): MatchResult[] {
-  console.log('📋 Executando fallback matching (sem IA)...');
+  console.log('📋 Executando fallback matching...');
   
-  return opportunities.slice(0, 15).map((opp: any) => {
+  return opportunities.slice(0, 30).map((opp: any) => {
     const score = calculateBasicScore(user.skills || [], opp.skills);
     const userSkills = user.skills?.map((s: string) => s.toLowerCase()) || [];
     const oppSkills = opp.skills?.map((s: string) => s.toLowerCase()) || [];
