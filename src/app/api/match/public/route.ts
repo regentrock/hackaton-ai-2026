@@ -1,246 +1,184 @@
-// app/api/match/public/route.ts - VERSÃO ATUALIZADA
 import { NextRequest, NextResponse } from 'next/server';
 
-type Priority = 'high' | 'medium' | 'low';
-
-interface MatchResult {
-  id: string;
-  title: string;
-  organization: string;
-  location: string;
-  description: string;
-  skills: string[];
-  matchScore: number;
-  matchedSkills: string[];
-  missingSkills: string[];
-  reasoning: string;
-  recommendation: string;
-  priority: Priority;
-  theme?: string;
-  projectLink?: string;
-}
-
-// Cache para projetos
+// Cache para projetos (10 minutos)
 let cachedProjects: any[] = [];
 let cacheTimestamp = 0;
 const CACHE_DURATION = 10 * 60 * 1000;
 
 export async function GET(request: NextRequest) {
-  const startTime = Date.now();
-  console.log('\n🚀 ========== MATCH API PÚBLICA ==========');
-  
   const url = new URL(request.url);
-  const page = parseInt(url.searchParams.get('page') || '1');
-  const limit = parseInt(url.searchParams.get('limit') || '12');
-  const offset = (page - 1) * limit;
   const area = url.searchParams.get('area') || '';
+  const limit = parseInt(url.searchParams.get('limit') || '10');
   
-  console.log(`📋 Parâmetros: area="${area}", page=${page}, limit=${limit}`);
+  console.log(`🔍 API Pública chamada - Área: "${area}"`);
   
   try {
     // Buscar oportunidades
-    let allOpportunities = await fetchOpportunitiesWithCache();
+    let opportunities = await fetchOpportunities();
     
-    if (allOpportunities.length === 0) {
+    if (opportunities.length === 0) {
       return NextResponse.json({
         success: true,
         opportunities: [],
         total: 0,
-        message: 'Nenhuma oportunidade encontrada no momento.'
+        message: 'Nenhuma oportunidade encontrada'
       });
     }
     
-    console.log(`📦 Total de ${allOpportunities.length} oportunidades carregadas`);
-    
-    // Criar um perfil de usuário padrão
-    const defaultUser = {
-      id: 'public',
-      name: 'Visitante',
-      skills: ['Comunicação', 'Trabalho em equipe', 'Proatividade'],
-      location: 'Brasil',
-      description: 'Interessado em voluntariado'
-    };
-    
-    // Calcular matches
-    let allMatches = calculateLocalMatches(defaultUser, allOpportunities);
-    
-    // Filtrar por área se especificada
-    if (area) {
-      const areaLower = area.toLowerCase();
-      allMatches = allMatches.filter(match => {
-        const title = (match.title || '').toLowerCase();
-        const theme = (match.theme || '').toLowerCase();
-        return title.includes(areaLower) || theme.includes(areaLower);
-      });
-      console.log(`✅ Encontrados ${allMatches.length} matches para área "${area}"`);
-    }
-    
-    // Ordenar por score
-    allMatches.sort((a, b) => b.matchScore - a.matchScore);
-    
-    // Paginar
-    const paginatedMatches = allMatches.slice(offset, offset + limit);
-    
-    // 🔥 FORMATO SIMPLIFICADO PARA O ORCHESTRATE 🔥
-    const formattedOpportunities = paginatedMatches.map(match => ({
-      title: match.title,
-      organization: match.organization,
-      location: match.location,
-      matchScore: match.matchScore,
-      reasoning: match.reasoning,
-      recommendation: match.recommendation,
-      matchedSkills: match.matchedSkills
+    // Calcular scores para cada oportunidade
+    let scoredOpportunities = opportunities.map(opp => ({
+      ...opp,
+      matchScore: calculateMatchScore(opp, area),
+      reasoning: generateReasoning(opp, area),
+      matchedSkills: ['Comunicação', 'Trabalho em equipe', 'Proatividade']
     }));
     
-    console.log(`\n📊 RESULTADOS:`);
-    console.log(`   🎯 Mostrando ${formattedOpportunities.length} de ${allMatches.length} matches`);
+    // Ordenar por score (maior primeiro)
+    scoredOpportunities.sort((a, b) => b.matchScore - a.matchScore);
     
-    // Retornar no formato que o prompt espera
+    // Filtrar por área se necessário
+    let filteredOpportunities = scoredOpportunities;
+    if (area) {
+      const areaLower = area.toLowerCase();
+      filteredOpportunities = scoredOpportunities.filter(opp => 
+        opp.theme?.toLowerCase().includes(areaLower) ||
+        opp.title?.toLowerCase().includes(areaLower) ||
+        opp.description?.toLowerCase().includes(areaLower)
+      );
+    }
+    
+    const results = filteredOpportunities.slice(0, limit);
+    
+    console.log(`✅ Retornando ${results.length} oportunidades para área "${area}"`);
+    
     return NextResponse.json({
       success: true,
-      opportunities: formattedOpportunities,
-      total: allMatches.length,
-      message: formattedOpportunities.length > 0 
-        ? `Encontradas ${allMatches.length} oportunidades` 
-        : `Nenhuma oportunidade encontrada para ${area}`
+      opportunities: results,
+      total: results.length,
+      area_solicitada: area
     });
     
-  } catch (error: any) {
-    console.error('❌ ERRO NA API PÚBLICA:', error);
-    return NextResponse.json(
-      { 
-        success: false, 
-        opportunities: [], 
-        total: 0,
-        error: 'Erro interno do servidor' 
-      },
-      { status: 500 }
-    );
+  } catch (error) {
+    console.error('❌ Erro:', error);
+    return NextResponse.json({
+      success: false,
+      opportunities: [],
+      total: 0,
+      error: 'Erro interno'
+    }, { status: 500 });
   }
 }
 
-function calculateLocalMatches(user: any, opportunities: any[]): MatchResult[] {
-  const results: MatchResult[] = [];
-  const userSkills = user.skills?.map((s: string) => s.toLowerCase()) || [];
-  
-  for (let i = 0; i < opportunities.length; i++) {
-    const opp = opportunities[i];
-    const oppText = `${opp.title} ${opp.description} ${opp.theme}`.toLowerCase();
-    
-    let baseScore = 65;
-    let matchedSkills: string[] = [];
-    let matchCount = 0;
-    
-    for (const skill of userSkills) {
-      if (oppText.includes(skill)) {
-        baseScore += 10;
-        matchedSkills.push(skill);
-        matchCount++;
-      }
-    }
-    
-    if (matchCount >= 2) baseScore += 10;
-    if (matchCount >= 3) baseScore += 15;
-    
-    let finalScore = baseScore + (i % 20) - 10;
-    finalScore = Math.min(95, Math.max(45, finalScore));
-    
-    let priority: Priority = finalScore >= 70 ? 'high' : finalScore >= 55 ? 'medium' : 'low';
-    
-    let reasoning = '';
-    let recommendation = '';
-    
-    if (finalScore >= 80) {
-      reasoning = `Excelente compatibilidade! Esta oportunidade em ${opp.theme || 'voluntariado'} é muito adequada ao seu perfil.`;
-      recommendation = `Recomendação forte: Candidate-se agora!`;
-    } else if (finalScore >= 65) {
-      reasoning = `Ótima compatibilidade! Você pode contribuir significativamente para este projeto.`;
-      recommendation = `Recomendação: Considere se candidatar.`;
-    } else {
-      reasoning = `Boa oportunidade para desenvolver habilidades na área de ${opp.theme || 'voluntariado'}.`;
-      recommendation = `Recomendação: Explore esta oportunidade.`;
-    }
-    
-    results.push({
-      id: opp.id,
-      title: opp.title,
-      organization: opp.organization,
-      location: opp.location,
-      description: opp.description?.substring(0, 300),
-      skills: [],
-      matchScore: Math.floor(finalScore),
-      matchedSkills: matchedSkills.slice(0, 3),
-      missingSkills: [],
-      reasoning: reasoning,
-      recommendation: recommendation,
-      priority: priority,
-      theme: opp.theme,
-      projectLink: opp.projectLink
-    });
-  }
-  
-  return results;
-}
-
-async function fetchOpportunitiesWithCache(): Promise<any[]> {
+async function fetchOpportunities() {
   const now = Date.now();
   
   if (cachedProjects.length > 0 && (now - cacheTimestamp) < CACHE_DURATION) {
-    console.log('📦 Usando cache de projetos');
+    console.log('📦 Usando cache');
     return cachedProjects;
   }
   
   const apiKey = process.env.GLOBAL_GIVING_API_KEY;
+  if (!apiKey) return getFallbackOpportunities();
   
-  if (!apiKey) {
-    console.error('❌ GLOBAL_GIVING_API_KEY não configurada');
-    return [];
-  }
-
   try {
     const allProjects: any[] = [];
     
-    console.log('🌍 Buscando oportunidades da GlobalGiving...');
-    
-    for (let page = 1; page <= 5; page++) {
+    for (let page = 1; page <= 3; page++) {
       const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}&page=${page}`;
-      
-      const response = await fetch(url, {
-        headers: { 'Accept': 'application/json' },
-        cache: 'no-store'
-      });
-
+      const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
       if (!response.ok) break;
-
       const data = await response.json();
       const projects = data.projects?.project || [];
-      
       if (projects.length === 0) break;
-      
       allProjects.push(...projects);
-      console.log(`📄 Página ${page}: +${projects.length} projetos`);
-      
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     
-    console.log(`📡 GlobalGiving: ${allProjects.length} projetos carregados`);
-
-    cachedProjects = allProjects.slice(0, 200).map((project: any) => ({
-      id: project.id,
-      title: project.title || 'Projeto de Voluntariado',
-      organization: project.organization?.name || 'GlobalGiving Partner',
-      location: `${project.location?.city || 'Brasil'}, ${project.location?.country || 'BR'}`,
-      description: (project.summary || project.description || '').substring(0, 800),
-      theme: project.themeName || 'Voluntariado',
-      projectLink: project.projectLink
+    cachedProjects = allProjects.map(p => ({
+      id: p.id,
+      title: p.title || 'Projeto de Voluntariado',
+      organization: p.organization?.name || 'ONG Parceira',
+      location: `${p.location?.city || 'Brasil'}, ${p.location?.country || 'BR'}`,
+      description: (p.summary || p.description || '').substring(0, 500),
+      theme: p.themeName || 'Voluntariado',
+      projectLink: p.projectLink
     }));
     
     cacheTimestamp = now;
-    
     return cachedProjects;
     
   } catch (error) {
-    console.error('❌ Erro ao buscar oportunidades:', error);
-    return [];
+    console.error('Erro na API GlobalGiving:', error);
+    return getFallbackOpportunities();
   }
+}
+
+function getFallbackOpportunities() {
+  return [
+    {
+      id: "1",
+      title: "Educação Infantil - Apoio Escolar",
+      organization: "Instituto Aprender",
+      location: "São Paulo, SP",
+      description: "Apoio escolar para crianças em vulnerabilidade social",
+      theme: "Educação",
+      projectLink: "/matches/1"
+    },
+    {
+      id: "2",
+      title: "Saúde Comunitária - Atendimento",
+      organization: "Saúde para Todos",
+      location: "Rio de Janeiro, RJ",
+      description: "Atendimento básico em comunidades carentes",
+      theme: "Saúde",
+      projectLink: "/matches/2"
+    },
+    {
+      id: "3",
+      title: "Meio Ambiente - Reflorestamento",
+      organization: "Verde Vida",
+      location: "Belo Horizonte, MG",
+      description: "Plantio de árvores em áreas degradadas",
+      theme: "Meio Ambiente",
+      projectLink: "/matches/3"
+    },
+    {
+      id: "4",
+      title: "Tecnologia para Jovens",
+      organization: "Tech Social",
+      location: "Remoto",
+      description: "Ensino de programação para jovens",
+      theme: "Tecnologia",
+      projectLink: "/matches/4"
+    },
+    {
+      id: "5",
+      title: "Assistência Social - Famílias",
+      organization: "Acolher",
+      location: "Salvador, BA",
+      description: "Acompanhamento de famílias em situação de risco",
+      theme: "Social",
+      projectLink: "/matches/5"
+    }
+  ];
+}
+
+function calculateMatchScore(opportunity: any, area: string): number {
+  if (!area) return 70;
+  
+  const areaLower = area.toLowerCase();
+  const theme = (opportunity.theme || '').toLowerCase();
+  const title = (opportunity.title || '').toLowerCase();
+  
+  if (theme.includes(areaLower) || title.includes(areaLower)) {
+    return 85 + Math.floor(Math.random() * 10);
+  }
+  return 60 + Math.floor(Math.random() * 15);
+}
+
+function generateReasoning(opportunity: any, area: string): string {
+  if (area) {
+    return `Excelente oportunidade na área de ${area}! Seu perfil se alinha muito bem com as necessidades deste projeto.`;
+  }
+  return `Ótima oportunidade para fazer a diferença! Esta vaga combina com seu perfil.`;
 }
