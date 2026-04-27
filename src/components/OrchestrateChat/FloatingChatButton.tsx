@@ -1,6 +1,4 @@
-// components/OrchestrateChat/FloatingChatButton.tsx - VERIFIQUE ESTE ARQUIVO
-// Ou o arquivo que contém a lógica do chat da IBM
-
+// components/OrchestrateChat/FloatingChatButton.tsx
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
@@ -12,6 +10,7 @@ interface Message {
   text: string;
   sender: 'user' | 'bot';
   timestamp: Date;
+  isLoading?: boolean;
 }
 
 export default function FloatingChatButton() {
@@ -19,34 +18,76 @@ export default function FloatingChatButton() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [opportunities, setOpportunities] = useState<any[]>([]);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [orchestrationId, setOrchestrationId] = useState<string | null>(null);
   const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  
-  // Carregar oportunidades ao iniciar
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Inicializar sessão do Orchestrate
   useEffect(() => {
-    if (user) {
-      fetchOpportunities();
+    if (isOpen && !sessionId && user) {
+      initializeOrchestrateSession();
     }
-  }, [user]);
-  
-  async function fetchOpportunities() {
+  }, [isOpen, user, sessionId]);
+
+  // Rolar para última mensagem
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  async function initializeOrchestrateSession() {
     try {
-      const response = await fetch('/api/match', {
-        credentials: 'include',
-        headers: { 'Content-Type': 'application/json' }
-      });
+      console.log('🚀 Inicializando sessão do Orchestrate...');
       
+      const response = await fetch('/api/orchestrate/session', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user?.id,
+          userName: user?.name,
+          userSkills: user?.skills || []
+        })
+      });
+
       if (response.ok) {
         const data = await response.json();
-        setOpportunities(data.matches || []);
-        console.log(`📦 ${opportunities.length} oportunidades carregadas para o chat`);
+        setSessionId(data.sessionId);
+        setOrchestrationId(data.orchestrationId);
+        
+        // Adicionar mensagem de boas-vinda
+        const welcomeMessage: Message = {
+          id: Date.now().toString(),
+          text: `Olá ${user?.name?.split(' ')[0] || 'Voluntário'}! Sou seu assistente de voluntariado. Posso ajudar você a encontrar oportunidades na área de educação, saúde, meio ambiente, tecnologia ou social. Como posso ajudar hoje?`,
+          sender: 'bot',
+          timestamp: new Date()
+        };
+        setMessages([welcomeMessage]);
+        
+        console.log('✅ Sessão do Orchestrate iniciada');
+      } else {
+        console.error('❌ Falha ao iniciar sessão do Orchestrate');
+        showOfflineMessage();
       }
     } catch (error) {
-      console.error('Erro ao carregar oportunidades:', error);
+      console.error('❌ Erro ao iniciar sessão:', error);
+      showOfflineMessage();
     }
   }
-  
+
+  function showOfflineMessage() {
+    const offlineMessage: Message = {
+      id: Date.now().toString(),
+      text: 'Estou conectado e pronto para ajudar! Por favor, digite sua mensagem sobre oportunidades de voluntariado e te ajudarei a encontrar as melhores opções.',
+      sender: 'bot',
+      timestamp: new Date()
+    };
+    setMessages([offlineMessage]);
+  }
+
   async function handleSendMessage() {
     if (!inputValue.trim() || isLoading) return;
     
@@ -61,99 +102,89 @@ export default function FloatingChatButton() {
     setInputValue('');
     setIsLoading(true);
     
+    // Adicionar mensagem de loading
+    const loadingMessageId = (Date.now() + 1).toString();
+    setMessages(prev => [...prev, {
+      id: loadingMessageId,
+      text: '',
+      sender: 'bot',
+      timestamp: new Date(),
+      isLoading: true
+    }]);
+    
     try {
-      // 🔥 CORREÇÃO: Buscar oportunidades da API local
-      let opportunitiesData = opportunities;
+      let response;
       
-      // Se não tem oportunidades em cache, buscar agora
-      if (opportunitiesData.length === 0) {
-        const response = await fetch('/api/match', {
+      // Se tem sessão do Orchestrate, usar a IBM
+      if (sessionId && orchestrationId) {
+        response = await fetch('/api/orchestrate/chat', {
+          method: 'POST',
           credentials: 'include',
-          headers: { 'Content-Type': 'application/json' }
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: inputValue,
+            sessionId: sessionId,
+            orchestrationId: orchestrationId,
+            userId: user?.id,
+            userSkills: user?.skills || [],
+            userDescription: user?.description || ''
+          })
         });
-        if (response.ok) {
-          const data = await response.json();
-          opportunitiesData = data.matches || [];
-          setOpportunities(opportunitiesData);
-        }
-      }
-      
-      // Filtrar oportunidades baseado na pergunta do usuário
-      const userQuery = inputValue.toLowerCase();
-      let relevantOpportunities = opportunitiesData;
-      
-      // Se o usuário pediu por área específica
-      if (userQuery.includes('educação') || userQuery.includes('ensino') || userQuery.includes('escola')) {
-        relevantOpportunities = opportunitiesData.filter(opp => 
-          opp.theme?.toLowerCase().includes('educação') ||
-          opp.title?.toLowerCase().includes('educação') ||
-          opp.title?.toLowerCase().includes('escola') ||
-          opp.title?.toLowerCase().includes('ensino')
-        );
-      } else if (userQuery.includes('saúde') || userQuery.includes('hospital')) {
-        relevantOpportunities = opportunitiesData.filter(opp => 
-          opp.theme?.toLowerCase().includes('saúde') ||
-          opp.title?.toLowerCase().includes('saúde') ||
-          opp.title?.toLowerCase().includes('hospital')
-        );
-      } else if (userQuery.includes('ambiente') || userQuery.includes('ecologia')) {
-        relevantOpportunities = opportunitiesData.filter(opp => 
-          opp.theme?.toLowerCase().includes('ambiente') ||
-          opp.title?.toLowerCase().includes('ambiente') ||
-          opp.title?.toLowerCase().includes('ecologia')
-        );
-      }
-      
-      // Gerar resposta
-      let botResponse = '';
-      
-      if (relevantOpportunities.length > 0) {
-        const topOpportunities = relevantOpportunities.slice(0, 5);
-        botResponse = `Encontrei ${relevantOpportunities.length} oportunidades de voluntariado! Aqui estão algumas sugestões:\n\n`;
-        
-        topOpportunities.forEach((opp, index) => {
-          botResponse += `${index + 1}. **${opp.title}**\n`;
-          botResponse += `   📍 ${opp.location}\n`;
-          botResponse += `   🏷️ ${opp.theme || 'Voluntariado'}\n`;
-          botResponse += `   📊 Compatibilidade: ${opp.matchScore}%\n`;
-          botResponse += `   💡 ${opp.reasoning?.substring(0, 100)}...\n\n`;
-        });
-        
-        botResponse += `Quer saber mais sobre alguma dessas oportunidades? Posso te ajudar com mais detalhes!`;
       } else {
-        // Se não encontrou oportunidades específicas, mostrar as melhores no geral
-        const topGeneral = opportunitiesData.slice(0, 5);
-        
-        if (topGeneral.length > 0) {
-          botResponse = `Com base no seu perfil, encontrei estas oportunidades que podem te interessar:\n\n`;
-          
-          topGeneral.forEach((opp, index) => {
-            botResponse += `${index + 1}. **${opp.title}**\n`;
-            botResponse += `   📍 ${opp.location}\n`;
-            botResponse += `   📊 Compatibilidade: ${opp.matchScore}%\n\n`;
-          });
-          
-          botResponse += `Posso filtrar por área específica (educação, saúde, ambiente) se você preferir!`;
-        } else {
-          botResponse = `No momento não encontrei oportunidades específicas para "${inputValue}". Que tal atualizar seu perfil com mais habilidades? Ou posso sugerir algumas vagas gerais para você começar!`;
-        }
+        // Fallback: usar API local de matching
+        response = await fetch('/api/chat/matches', {
+          method: 'POST',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            message: inputValue,
+            userId: user?.id
+          })
+        });
       }
       
-      const botMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: botResponse,
-        sender: 'bot',
-        timestamp: new Date()
-      };
+      // Remover mensagem de loading
+      setMessages(prev => prev.filter(msg => msg.id !== loadingMessageId));
       
-      setMessages(prev => [...prev, botMessage]);
+      if (response.ok) {
+        const data = await response.json();
+        
+        const botMessage: Message = {
+          id: (Date.now() + 2).toString(),
+          text: data.response || data.message,
+          sender: 'bot',
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, botMessage]);
+        
+        // Se tiver oportunidades, sugerir visualização
+        if (data.opportunities && data.opportunities.length > 0) {
+          const suggestionMessage: Message = {
+            id: (Date.now() + 3).toString(),
+            text: `Encontrei ${data.opportunities.length} oportunidades. Acesse a página de oportunidades para ver todos os detalhes.`,
+            sender: 'bot',
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, suggestionMessage]);
+        }
+      } else {
+        throw new Error('Falha na comunicação');
+      }
       
     } catch (error) {
       console.error('Erro no chat:', error);
       
+      // Remover mensagem de loading
+      setMessages(prev => prev.filter(msg => msg.id !== loadingMessageId));
+      
       const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        text: `Desculpe, estou com dificuldade técnica no momento. Por favor, tente novamente em alguns instantes ou acesse diretamente a página de oportunidades para ver as vagas disponíveis.`,
+        id: (Date.now() + 2).toString(),
+        text: 'Desculpe, estou com dificuldade técnica no momento. Por favor, tente novamente em alguns instantes ou acesse diretamente a página de oportunidades.',
         sender: 'bot',
         timestamp: new Date()
       };
@@ -161,98 +192,123 @@ export default function FloatingChatButton() {
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
+      inputRef.current?.focus();
     }
   }
-  
-  // Rolar para última mensagem
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-  
+
+  if (!isOpen) {
+    return (
+      <button
+        onClick={() => setIsOpen(true)}
+        className={styles.chatButton}
+        aria-label="Abrir chat"
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2Z" fill="currentColor"/>
+          <circle cx="8" cy="10" r="1.5" fill="white"/>
+          <circle cx="12" cy="10" r="1.5" fill="white"/>
+          <circle cx="16" cy="10" r="1.5" fill="white"/>
+        </svg>
+      </button>
+    );
+  }
+
   return (
-    <>
-      {/* Botão flutuante */}
-      {!isOpen && (
-        <button
-          onClick={() => setIsOpen(true)}
-          className={styles.chatButton}
-        >
-          <i className="fas fa-comment-dots"></i>
-        </button>
-      )}
-      
-      {/* Janela do chat */}
-      {isOpen && (
-        <div className={styles.chatWindow}>
-          <div className={styles.chatHeader}>
-            <div className={styles.chatHeaderInfo}>
-              <i className="fas fa-robot"></i>
-              <span>Assistente de Voluntariado</span>
-            </div>
-            <button onClick={() => setIsOpen(false)} className={styles.closeButton}>
-              <i className="fas fa-times"></i>
-            </button>
-          </div>
-          
-          <div className={styles.chatMessages}>
-            {messages.length === 0 && (
-              <div className={styles.welcomeMessage}>
-                <i className="fas fa-hand-wave"></i>
-                <p>Olá! 👋 Sou seu assistente de voluntariado.</p>
-                <p>Posso ajudar você a encontrar oportunidades na área de:</p>
-                <ul>
-                  <li>🎓 Educação</li>
-                  <li>🏥 Saúde</li>
-                  <li>🌱 Meio Ambiente</li>
-                  <li>🤝 Social</li>
-                  <li>💻 Tecnologia</li>
-                </ul>
-                <p>Me diga o que você procura!</p>
-              </div>
-            )}
-            
-            {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`${styles.message} ${msg.sender === 'user' ? styles.userMessage : styles.botMessage}`}
-              >
-                {msg.sender === 'bot' && <i className="fas fa-robot"></i>}
-                <div className={styles.messageContent}>
-                  <p>{msg.text}</p>
-                  <span className={styles.messageTime}>
-                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-                {msg.sender === 'user' && <i className="fas fa-user"></i>}
-              </div>
-            ))}
-            
-            {isLoading && (
-              <div className={styles.typingIndicator}>
-                <span></span>
-                <span></span>
-                <span></span>
-              </div>
-            )}
-            
-            <div ref={messagesEndRef} />
-          </div>
-          
-          <div className={styles.chatInput}>
-            <input
-              type="text"
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-              placeholder="Digite sua mensagem..."
-              disabled={isLoading}
-            />
-            <button onClick={handleSendMessage} disabled={isLoading || !inputValue.trim()}>
-              <i className="fas fa-paper-plane"></i>
-            </button>
-          </div>
+    <div className={styles.chatWindow}>
+      <div className={styles.chatHeader}>
+        <div className={styles.chatHeaderInfo}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="currentColor"/>
+            <path d="M12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z" fill="white"/>
+          </svg>
+          <span>Assistente de Voluntariado</span>
         </div>
-      )}
-    </>
+        <button onClick={() => setIsOpen(false)} className={styles.closeButton} aria-label="Fechar">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41Z" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+      
+      <div className={styles.chatMessages}>
+        {messages.length === 0 ? (
+          <div className={styles.welcomeMessage}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M20 2H4C2.9 2 2 2.9 2 4V22L6 18H20C21.1 18 22 17.1 22 16V4C22 2.9 21.1 2 20 2Z" fill="#b02629" opacity="0.8"/>
+              <circle cx="8" cy="10" r="1.5" fill="white"/>
+              <circle cx="12" cy="10" r="1.5" fill="white"/>
+              <circle cx="16" cy="10" r="1.5" fill="white"/>
+            </svg>
+            <p>Olá! Sou seu assistente de voluntariado.</p>
+            <p>Posso ajudar você a encontrar oportunidades nas áreas:</p>
+            <ul>
+              <li>Educação</li>
+              <li>Saúde</li>
+              <li>Meio Ambiente</li>
+              <li>Tecnologia</li>
+              <li>Social</li>
+            </ul>
+            <p>Como posso ajudar você hoje?</p>
+          </div>
+        ) : (
+          messages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`${styles.message} ${msg.sender === 'user' ? styles.userMessage : styles.botMessage}`}
+            >
+              {msg.sender === 'bot' && !msg.isLoading && (
+                <div className={styles.botAvatar}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z" fill="currentColor"/>
+                    <path d="M12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z" fill="white"/>
+                  </svg>
+                </div>
+              )}
+              <div className={styles.messageContent}>
+                {msg.isLoading ? (
+                  <div className={styles.typingIndicator}>
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                ) : (
+                  <>
+                    <p>{msg.text}</p>
+                    <span className={styles.messageTime}>
+                      {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </>
+                )}
+              </div>
+              {msg.sender === 'user' && (
+                <div className={styles.userAvatar}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="currentColor"/>
+                  </svg>
+                </div>
+              )}
+            </div>
+          ))
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+      
+      <div className={styles.chatInput}>
+        <input
+          ref={inputRef}
+          type="text"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
+          placeholder="Digite sua mensagem..."
+          disabled={isLoading}
+        />
+        <button onClick={handleSendMessage} disabled={isLoading || !inputValue.trim()}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+    </div>
   );
 }
