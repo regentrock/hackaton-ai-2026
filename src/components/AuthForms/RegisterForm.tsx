@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import styles from './AuthForms.module.css';
+import Image from 'next/image';
 
 interface AuthError {
   message: string;
@@ -275,8 +276,7 @@ export default function RegisterForm() {
         <div className={styles.imageSide}>
           <div className={styles.imageContent}>
             <div className={styles.logo}>
-              <span className={styles.logoHeart}>❤️</span>
-              <span className={styles.logoText}>Volunta<span>Re</span></span>
+              <img src="/logo.png"></img>
             </div>
             
             <div className={styles.imageTitle}>

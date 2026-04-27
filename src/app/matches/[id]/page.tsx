@@ -1,3 +1,4 @@
+// page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -111,12 +112,6 @@ export default function OpportunityDetailPage() {
         
         if (res.ok) {
           setIsSaved(false);
-          // Feedback visual
-          const button = document.getElementById('save-button');
-          if (button) {
-            button.innerHTML = '<i class="fas fa-bookmark"></i> Salvar';
-            button.classList.remove(styles.saved);
-          }
           console.log('✅ Oportunidade removida dos salvos');
         } else {
           alert('Erro ao remover dos salvos');
@@ -142,17 +137,6 @@ export default function OpportunityDetailPage() {
         
         if (res.ok) {
           setIsSaved(true);
-          // Feedback visual
-          const button = document.getElementById('save-button');
-          if (button) {
-            button.innerHTML = '<i class="fas fa-check"></i> Salvo!';
-            button.classList.add(styles.saved);
-            setTimeout(() => {
-              if (button && isSaved) {
-                button.innerHTML = '<i class="fas fa-bookmark"></i> Salvo';
-              }
-            }, 2000);
-          }
           console.log('✅ Oportunidade salva com sucesso');
         } else {
           const data = await res.json();
@@ -196,28 +180,13 @@ export default function OpportunityDetailPage() {
 
   return (
     <div className={styles.pageContainer}>
-      {/* Top Bar */}
+      {/* Top Bar - Apenas com o botão voltar */}
       <div className={styles.topBar}>
         <div className={styles.topBarInner}>
           <button onClick={() => router.push('/matches')} className={styles.backButton}>
             <i className="fas fa-arrow-left"></i>
             Voltar
           </button>
-          <div className={styles.topBarActions}>
-            <button 
-              id="save-button"
-              onClick={handleSave}
-              disabled={saving}
-              className={`${styles.saveButton} ${isSaved ? styles.saved : ''}`}
-            >
-              <i className={`fas ${isSaved ? 'fa-check' : 'fa-bookmark'}`}></i>
-              {saving ? 'Salvando...' : (isSaved ? 'Salvo' : 'Salvar')}
-            </button>
-            <button className={styles.contactButton}>
-              <i className="fas fa-envelope"></i>
-              Contato
-            </button>
-          </div>
         </div>
       </div>
 
@@ -350,29 +319,20 @@ export default function OpportunityDetailPage() {
 
         {/* Right Sidebar */}
         <div className={styles.sidebar}>
-          {/* Score Card */}
-          <div className={`${styles.scoreCard} ${styles[opportunity.priority]}`}>
-            <div className={styles.scoreCardLabel}>Compatibilidade</div>
-            <div className={styles.scoreRing}>
-              <svg className={styles.scoreRingCircle} viewBox="0 0 100 100">
-                <circle className={styles.scoreRingBg} cx="50" cy="50" r="45" />
-                <circle 
-                  className={`${styles.scoreRingFill} ${getScoreRingClass(opportunity.matchScore)}`} 
-                  cx="50" cy="50" r="45" 
-                  strokeDasharray={`${2 * Math.PI * 45}`}
-                  strokeDashoffset={`${2 * Math.PI * 45 * (1 - opportunity.matchScore / 100)}`}
-                />
-              </svg>
-              <div className={styles.scoreCenter}>
-                <span className={styles.scoreNumber}>{opportunity.matchScore}</span>
-                <span className={styles.scorePercent}>%</span>
-              </div>
+          {/* CTA Block - Botão Tenho Interesse com funcionalidade de salvar */}
+          <div className={styles.ctaBlock}>
+            <div className={styles.ctaTitle}>Quer se candidatar?</div>
+            <div className={styles.ctaSubtitle}>
+              Essa oportunidade pode ser um ótimo passo na sua jornada de voluntariado
             </div>
-            <div className={styles.scoreCardPriority}>
-              {opportunity.priority === 'high' ? 'Excelente oportunidade' : 
-               opportunity.priority === 'medium' ? 'Boa oportunidade' : 
-               'Em desenvolvimento'}
-            </div>
+            <button 
+              onClick={handleSave}
+              disabled={saving}
+              className={styles.ctaButton}
+            >
+              <i className={`fas ${isSaved ? 'fa-check' : 'fa-heart'}`}></i>
+              {saving ? 'Salvando...' : (isSaved ? 'Interesse registrado' : 'Tenho interesse')}
+            </button>
           </div>
 
           {/* Info Widget */}
@@ -396,17 +356,6 @@ export default function OpportunityDetailPage() {
                 <div className={styles.infoRowValue}>{opportunity.organization}</div>
               </div>
             </div>
-          </div>
-
-          {/* CTA Block */}
-          <div className={styles.ctaBlock}>
-            <div className={styles.ctaTitle}>Quer se candidatar?</div>
-            <div className={styles.ctaSubtitle}>
-              Essa oportunidade pode ser um ótimo passo na sua jornada de voluntariado
-            </div>
-            <button className={styles.ctaButton}>
-              Tenho interesse
-            </button>
           </div>
 
           {/* Disclaimer */}

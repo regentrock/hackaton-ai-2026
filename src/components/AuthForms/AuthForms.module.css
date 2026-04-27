@@ -1,3 +1,4 @@
+/* AuthForms.module.css - Versão Corrigida com Imagem de Fundo */
 
 .authWrapper {
   display: flex;
@@ -9,12 +10,16 @@
 
 .splitLayout {
   display: flex;
-  max-width: 1100px;
+  max-width: 1200px;
   width: 100%;
-  background: white;
-  border-radius: 20px;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  border-radius: 28px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   overflow: hidden;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.splitLayout:hover {
+  box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.3);
 }
 
 .formSide {
@@ -27,19 +32,24 @@
   min-width: 0;
 }
 
+/* Image Side - Design Premium com Imagem Visível */
 .imageSide {
   flex: 1;
-  background-image: url('https://spotlight.lehigh.edu/sites/spotlight.lehigh.edu/files/170829-A-YG824-0001-1.jpg');
-    background-size: cover;
-  background-position: center;
   position: relative;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 2rem;
-  overflow: hidden;
+  min-height: 600px;
+  /* Imagem de fundo principal */
+  background-image: url('https://images.unsplash.com/photo-1532629345422-7515f3d16bb6?q=80&w=2070&auto=format&fit=crop');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
+/* Overlay gradiente sobre a imagem (em vez de substituir) */
 .imageSide::before {
   content: '';
   position: absolute;
@@ -47,11 +57,15 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.3);
-  z-index: 0;
+  opacity: 0.75;
+  background: linear-gradient(135deg, 
+    rgba(215, 38, 46, 0.75) 0%,
+    rgba(176, 30, 37, 0.85) 50%,
+    rgba(139, 24, 29, 0.9) 100%);
+  z-index: 1;
 }
 
-/* Padrão decorativo */
+/* Padrão decorativo sutil sobre o overlay */
 .imageSide::after {
   content: '';
   position: absolute;
@@ -59,90 +73,44 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 320"><path fill="rgba(255,255,255,0.08)" fill-opacity="1" d="M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,154.7C960,171,1056,181,1152,165.3C1248,149,1344,107,1392,85.3L1440,64L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z"></path></svg>');
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 320'%3E%3Cpath fill='rgba(255,255,255,0.08)' fill-opacity='1' d='M0,96L48,112C96,128,192,160,288,160C384,160,480,128,576,122.7C672,117,768,139,864,154.7C960,171,1056,181,1152,165.3C1248,149,1344,107,1392,85.3L1440,64L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z'%3E%3C/path%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: bottom;
   background-size: cover;
-  opacity: 0.15;
-  z-index: 0;
+  z-index: 2;
+  pointer-events: none;
 }
 
 .imageContent {
   position: relative;
-  z-index: 1;
+  z-index: 3;
   text-align: center;
   color: white;
   max-width: 400px;
-  padding: 1.5rem;
+  padding: 2rem;
+  animation: fadeInUp 0.8s ease-out;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .logo {
   font-size: 3rem;
   font-weight: bold;
-  margin-bottom: 1.5rem;
+  margin-bottom: 2rem;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-}
-
-.logoHeart {
-  font-size: 3rem;
-  animation: pulse 1.5s ease-in-out infinite;
-}
-
-.logoText {
-  font-size: 2.2rem;
-  font-weight: 800;
-}
-
-.logoText span {
-  color: #ffcc00;
-}
-
-.imageTitle {
-  font-size: 1.65rem;
-  font-weight: 800;
-  margin-bottom: 1rem;
-  line-height: 1;
-}
-
-.imageSubtitle {
-  font-size: 1rem;
-  margin-bottom: 1rem;
-  line-height: 1.5;
-  opacity: 0.95;
-}
-
-.checkIcon {
-  font-size: 1rem;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.testimonial {
-  margin-top: 1.5rem;
-  padding: 1rem;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  backdrop-filter: blur(10px);
-}
-
-.testimonial p {
-  font-size: 0.8rem;
-  font-style: italic;
-  margin-bottom: 0.5rem;
-}
-
-.testimonialAuthor {
-  font-size: 0.7rem;
-  opacity: 0.9;
-  font-weight: 500;
+  animation: pulse 2s ease-in-out infinite;
 }
 
 @keyframes pulse {
@@ -150,8 +118,125 @@
     transform: scale(1);
   }
   50% {
-    transform: scale(1.05);
+    transform: scale(1.02);
   }
+}
+
+.logo img {
+  max-width: 50%;
+  height: auto;
+  filter: brightness(0) invert(1);
+  transition: transform 0.3s ease;
+}
+
+.logo img:hover {
+  transform: rotate(5deg);
+}
+
+.imageTitle {
+  font-size: 1.85rem;
+  font-weight: 800;
+  margin-bottom: 1rem;
+  line-height: 1.2;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  letter-spacing: -0.02em;
+}
+
+.imageTitle::after {
+  content: '';
+  display: block;
+  width: 60px;
+  height: 3px;
+  background: linear-gradient(90deg, #fff, rgba(255, 255, 255, 0.3));
+  margin: 1rem auto 0;
+  border-radius: 2px;
+}
+
+.imageSubtitle {
+  font-size: 1rem;
+  margin-bottom: 1.5rem;
+  line-height: 1.5;
+  opacity: 0.95;
+  text-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+}
+
+/* Lista de estatísticas */
+.statList {
+  list-style: none;
+  padding: 0;
+  margin: 1.5rem 0 0;
+  text-align: left;
+}
+
+.statList li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.5rem 0;
+  font-size: 0.85rem;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  padding: 0.75rem 1rem;
+  transition: all 0.3s ease;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.statList li:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateX(5px);
+}
+
+.checkIcon {
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+/* Testimonial card */
+.testimonial {
+  margin-top: 1.5rem;
+  padding: 1.25rem;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  transition: all 0.3s ease;
+}
+
+.testimonial:hover {
+  background: rgba(255, 255, 255, 0.18);
+  transform: translateY(-3px);
+}
+
+.testimonial p {
+  font-size: 0.85rem;
+  font-style: italic;
+  margin-bottom: 0.75rem;
+  line-height: 1.5;
+  color: white;
+}
+
+.testimonialAuthor {
+  font-size: 0.7rem;
+  opacity: 0.9;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.testimonialAuthor::before {
+  content: '—';
+  opacity: 0.7;
 }
 
 /* Container do formulário */
@@ -160,16 +245,17 @@
   max-width: 380px;
   padding: 0;
   background: transparent;
-  font-family: Arial, sans-serif;
+  font-family: 'DM Sans', sans-serif;
 }
 
 /* Título */
 .title {
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 700;
   color: #1f2937;
   margin-bottom: 8px;
   text-align: center;
+  letter-spacing: -0.02em;
 }
 
 .subtitle {
@@ -183,100 +269,110 @@
 .label {
   display: block;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 600;
   margin-bottom: 6px;
   color: #374151;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 /* Inputs */
 .input {
   width: 100%;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid #e5e7eb;
   background: #fafafa;
   transition: all 0.2s ease;
   font-size: 14px;
+  font-family: 'DM Sans', sans-serif;
 }
 
 .input:focus {
   outline: none;
   border-color: #d7262e;
-  box-shadow: 0 0 0 3px rgba(215, 38, 46, 0.1);
+  box-shadow: 0 0 0 4px rgba(215, 38, 46, 0.1);
   background: #fff;
 }
 
 /* Textarea */
 .textarea {
   width: 100%;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1.5px solid #e5e7eb;
   background: #fafafa;
   font-size: 14px;
   resize: none;
-  font-family: Arial, sans-serif;
+  font-family: 'DM Sans', sans-serif;
+  transition: all 0.2s ease;
 }
 
 .textarea:focus {
   outline: none;
   border-color: #d7262e;
-  box-shadow: 0 0 0 3px rgba(215, 38, 46, 0.1);
+  box-shadow: 0 0 0 4px rgba(215, 38, 46, 0.1);
   background: #fff;
 }
 
 /* Botão primário */
 .primaryButton {
   width: 100%;
-  padding: 10px;
-  border-radius: 8px;
-  background: #d7262e;
+  padding: 12px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #d7262e 0%, #b01e25 100%);
   color: white;
-  font-weight: 600;
+  font-weight: 700;
   border: none;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
   font-size: 14px;
   margin-top: 8px;
+  font-family: 'DM Sans', sans-serif;
+  letter-spacing: 0.5px;
 }
 
 .primaryButton:hover {
-  background: #b01e25;
-  transform: translateY(-1px);
+  background: linear-gradient(135deg, #b01e25 0%, #8a171c 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(215, 38, 46, 0.3);
 }
 
 .primaryButton:disabled {
   opacity: 0.6;
   cursor: not-allowed;
   transform: none;
+  box-shadow: none;
 }
 
 /* Botão secundário */
 .secondaryButton {
   width: 100%;
-  padding: 10px;
-  border-radius: 8px;
+  padding: 12px;
+  border-radius: 12px;
   background: transparent;
   color: #d7262e;
-  font-weight: 600;
+  font-weight: 700;
   border: 2px solid #d7262e;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s ease;
   font-size: 14px;
+  font-family: 'DM Sans', sans-serif;
 }
 
 .secondaryButton:hover {
   background: rgba(215, 38, 46, 0.05);
+  transform: translateY(-2px);
 }
 
 /* Botão de adicionar skill */
 .addButton {
   width: auto;
   padding: 10px 20px;
-  border-radius: 8px;
+  border-radius: 10px;
   background: #f0f0f0;
   color: #374151;
-  font-weight: 500;
+  font-weight: 600;
   border: 1px solid #e5e7eb;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -286,16 +382,18 @@
 
 .addButton:hover {
   background: #e0e0e0;
+  transform: translateY(-1px);
 }
 
 /* Erro */
 .error {
   background: #fee2e2;
   color: #d7262e;
-  padding: 10px;
-  border-radius: 8px;
+  padding: 12px;
+  border-radius: 12px;
   font-size: 12px;
   margin-bottom: 16px;
+  border-left: 4px solid #d7262e;
 }
 
 /* Skills container */
@@ -308,14 +406,21 @@
 
 /* Skill tag */
 .skill {
-  background: #d7262e;
+  background: linear-gradient(135deg, #d7262e 0%, #b01e25 100%);
   color: white;
-  padding: 4px 10px;
-  border-radius: 20px;
+  padding: 6px 12px;
+  border-radius: 24px;
   font-size: 11px;
+  font-weight: 500;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  transition: all 0.2s ease;
+}
+
+.skill:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(215, 38, 46, 0.3);
 }
 
 .removeSkill {
@@ -324,14 +429,20 @@
   color: white;
   background: none;
   border: none;
-  font-size: 14px;
+  font-size: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  opacity: 0.8;
+  transition: opacity 0.2s ease;
+}
+
+.removeSkill:hover {
+  opacity: 1;
 }
 
 .group {
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .footerText {
@@ -359,7 +470,7 @@
 
 /* Divisor */
 .divider {
-  margin: 16px 0;
+  margin: 20px 0;
   color: #999;
   font-size: 11px;
   position: relative;
@@ -389,6 +500,7 @@
   .splitLayout {
     flex-direction: column;
     max-width: 500px;
+    border-radius: 20px;
   }
   
   .imageSide {
@@ -410,18 +522,15 @@
   }
   
   .title {
-    font-size: 22px;
+    font-size: 24px;
   }
   
-  .logo {
-    font-size: 2rem;
+  .logo img {
+    max-width: 60px;
   }
   
-  .logoHeart {
-    font-size: 2rem;
-  }
-  
-  .logoText {
-    font-size: 1.8rem;
+  .primaryButton,
+  .secondaryButton {
+    padding: 10px;
   }
 }

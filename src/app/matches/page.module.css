@@ -10,7 +10,7 @@
 }
 
 .container {
-  max-width: 1280px;
+  max-width: 85vw;
   margin: 0 auto;
   padding: 2rem 2rem 3rem;
   position: relative;
@@ -114,16 +114,22 @@
 }
 
 /* =========================
-   HEADER
+   HEADER MODERNIZADO
 ========================= */
 .header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
   margin-bottom: 2.5rem;
   padding-bottom: 2rem;
   border-bottom: 1px solid #e2e8f0;
+  gap: 2rem;
+  flex-wrap: wrap;
 }
 
-.headerContent {
-  max-width: 70%;
+.headerLeft {
+  flex: 1;
+  min-width: 200px;
 }
 
 .eyebrow {
@@ -156,15 +162,15 @@
 
 .titleHighlight {
   display: block;
-  font-size: 0.9rem;
+  font-size: 1.1rem;
   font-weight: 400;
-  color: #64748b;
+  color: #49525e;
   margin-top: 0.5rem;
 }
 
 .subtitle {
-  color: #64748b;
-  font-size: 0.9rem;
+  color: #657283;
+  font-size: 0.95rem;
   line-height: 1.5;
   max-width: 480px;
 }
@@ -180,10 +186,10 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  padding: 0.3rem 0.75rem;
-  background: #f1f5f9;
+  padding: 0.4rem 0.8rem;
+  background: #eef1f5;
   border-radius: 2rem;
-  font-size: 0.7rem;
+  font-size: 0.85rem;
   color: #475569;
 }
 
@@ -284,7 +290,7 @@
 }
 
 .sectionTitle {
-  font-size: 1.25rem;
+  font-size: 4rem;
   font-weight: 600;
   color: #0f172a;
   margin: 0;
@@ -296,16 +302,45 @@
 }
 
 /* =========================
-   CARDS GRID
+   HORIZONTAL SCROLL CONTAINER
 ========================= */
-.cardsGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 1.5rem;
+.horizontalScrollContainer {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
   margin-bottom: 2rem;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 
-/* Match Card */
+.horizontalScrollContainer::-webkit-scrollbar {
+  height: 6px;
+}
+
+.horizontalScrollContainer::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 10px;
+}
+
+.horizontalScrollContainer::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 10px;
+}
+
+.horizontalScrollContainer::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.cardsRow {
+  display: flex;
+  flex-direction: row;
+  gap: 1.25rem;
+  min-width: min-content;
+}
+
+/* =========================
+   MATCH CARD
+========================= */
 .matchCard {
   background: #ffffff;
   border-radius: 1rem;
@@ -315,10 +350,11 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  width: 380px;
+  flex-shrink: 0;
 }
 
 .matchCard:hover {
-  transform: translateY(-4px);
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
   border-color: #cbd5e1;
 }
@@ -469,7 +505,7 @@
 .sectionTitle {
   font-size: 0.7rem;
   font-weight: 600;
-  color: #94a3b8;
+  color: #333b47;
   margin-bottom: 0.5rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -486,12 +522,12 @@
   border-radius: 2rem;
   font-size: 0.75rem;
   font-weight: 500;
-  background: #f1f5f9;
+  background: #eef0f3;
   color: #334155;
 }
 
 .cardInfo {
-  background: #f8fafc;
+  background: #f1f2f3;
   border-radius: 0.75rem;
   margin: 1rem 0;
   overflow: hidden;
@@ -506,8 +542,8 @@
 }
 
 .reasoningBlock i {
-  font-size: 0.8rem;
-  color: #b02629;
+  font-size: 1rem;
+  color: #949494;
   margin-top: 2px;
   flex-shrink: 0;
 }
@@ -714,12 +750,12 @@
 }
 
 .totalCount {
-  background: #f1f5f9;
-  padding: 0.15rem 0.6rem;
+  background: #ebeef1;
+  padding: 0.3rem 0.6rem;
   border-radius: 2rem;
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   font-weight: 500;
-  color: #64748b;
+  color: #627083;
 }
 
 .moreControls {
@@ -987,12 +1023,21 @@
    RESPONSIVE
 ========================= */
 @media (max-width: 900px) {
-  .headerContent {
-    max-width: 100%;
+  .header {
+    flex-direction: column;
   }
   
-  .title {
-    font-size: 1.75rem;
+  .headerRight {
+    width: 100%;
+  }
+  
+  .userInfo {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  
+  .matchCard {
+    width: 340px;
   }
 }
 
@@ -1000,9 +1045,9 @@
   .container {
     padding: 1rem 1rem 2rem;
   }
-  
-  .cardsGrid {
-    grid-template-columns: 1fr;
+
+  .horizontalScrollContainer{
+    width: 100vw;
   }
   
   .filtersBar {
@@ -1041,5 +1086,13 @@
   
   .actionButtons {
     flex-direction: column;
+  }
+  
+  .matchCard {
+    width: 300px;
+  }
+  
+  .cardsRow {
+    gap: 1rem;
   }
 }

@@ -248,23 +248,24 @@ export default function MatchesPage() {
     <div className={styles.pageContainer}>
       <div className={styles.container}>
 
+        {/* Header Modernizado */}
         <div className={styles.header}>
-          <div className={styles.headerContent}>
+          <div className={styles.headerLeft}>
             <div className={styles.eyebrow}>Oportunidades personalizadas</div>
             <h1 className={styles.title}>
-              Oportunidades para você
-              <span className={styles.titleHighlight}>selecionadas com base no seu perfil</span>
+              Oportunidade para você, {user.name?.split(' ')[0] || 'Voluntário'}!
+              <span className={styles.titleHighlight}>oportunidades selecionadas para você</span>
             </h1>
             <p className={styles.subtitle}>
               Análise inteligente das melhores oportunidades alinhadas às suas habilidades e objetivos.
             </p>
           </div>
+          
         </div>
 
         {user.skills && user.skills.length > 0 && (
           <div className={styles.skillsWrapper}>
             <div className={styles.skillsBadge}>
-              <i className="fas fa-user-check"></i>
               <span>{user.skills.slice(0, 5).join(' • ')}{user.skills.length > 5 && ` • +${user.skills.length - 5}`}</span>
             </div>
           </div>
@@ -350,91 +351,90 @@ export default function MatchesPage() {
               <h2 className={styles.sectionTitle}>Melhores opções para você</h2>
               <span className={styles.sectionCount}>{filteredTopMatches.length} oportunidades</span>
             </div>
-            <div className={styles.cardsGrid}>
-              {filteredTopMatches.map((match) => {
-                const saved = isSaved(match.id);
-                return (
-                  <div key={match.id} className={`${styles.matchCard} ${getPriorityClass(match.matchScore)}`}>
-                    <div className={styles.cardStripe}></div>
-                    <div className={styles.cardInner}>
-                      <div className={styles.cardHeader}>
-                        <div className={styles.cardHeaderLeft}>
-                          <div className={styles.organizationIcon}>
-                            <i className="fas fa-briefcase"></i>
+            <div className={styles.horizontalScrollContainer}>
+              <div className={styles.cardsRow}>
+                {filteredTopMatches.map((match) => {
+                  const saved = isSaved(match.id);
+                  return (
+                    <div key={match.id} className={`${styles.matchCard} ${getPriorityClass(match.matchScore)}`}>
+                      <div className={styles.cardStripe}></div>
+                      <div className={styles.cardInner}>
+                        <div className={styles.cardHeader}>
+                          <div className={styles.cardHeaderLeft}>
+                            <div className={styles.cardTitleGroup}>
+                              <h3 className={styles.cardTitle}>{match.title}</h3>
+                              <p className={styles.organization}>{match.organization}</p>
+                            </div>
                           </div>
-                          <div className={styles.cardTitleGroup}>
-                            <h3 className={styles.cardTitle}>{match.title}</h3>
-                            <p className={styles.organization}>{match.organization}</p>
+                          <div className={`${styles.scoreBadge} ${getScoreClass(match.matchScore)}`}>
+                            <span className={styles.scoreValue}>{match.matchScore}%</span>
+                            <span className={styles.scoreLabel}>match</span>
                           </div>
                         </div>
-                        <div className={`${styles.scoreBadge} ${getScoreClass(match.matchScore)}`}>
-                          <span className={styles.scoreValue}>{match.matchScore}%</span>
-                          <span className={styles.scoreLabel}>match</span>
-                        </div>
-                      </div>
 
-                      <div className={styles.cardMeta}>
-                        <span className={styles.metaItem}>
-                          <i className="fas fa-map-marker-alt"></i>
-                          {match.location}
-                        </span>
-                        {match.theme && (
+                        <div className={styles.cardMeta}>
                           <span className={styles.metaItem}>
-                            {match.theme}
+                            <i className="fas fa-map-marker-alt"></i>
+                            {match.location}
                           </span>
+                          {match.theme && (
+                            <span className={styles.metaItem}>
+                              {match.theme}
+                            </span>
+                          )}
+                        </div>
+
+                        <p className={styles.cardDescription}>{match.description?.substring(0, 120)}...</p>
+
+                        {match.matchedSkills && match.matchedSkills.length > 0 && (
+                          <div className={styles.sectionBlock}>
+                            <div className={styles.sectionTitle}>
+                              <span>Habilidades que combinam</span>
+                            </div>
+                            <div className={styles.skillsGroup}>
+                              {match.matchedSkills.slice(0, 3).map((skill, i) => (
+                                <span key={i} className={styles.skill}>{skill}</span>
+                              ))}
+                            </div>
+                          </div>
                         )}
-                      </div>
 
-                      <p className={styles.cardDescription}>{match.description?.substring(0, 120)}...</p>
-
-                      {match.matchedSkills && match.matchedSkills.length > 0 && (
-                        <div className={styles.sectionBlock}>
-                          <div className={styles.sectionTitle}>
-                            <span>Habilidades que combinam</span>
+                        <div className={styles.cardInfo}>
+                          <div className={styles.reasoningBlock}>
+                            <i className="fas fa-info-circle"></i>
+                            <p>{match.reasoning}</p>
                           </div>
-                          <div className={styles.skillsGroup}>
-                            {match.matchedSkills.slice(0, 3).map((skill, i) => (
-                              <span key={i} className={styles.skill}>{skill}</span>
-                            ))}
+                          <div className={styles.recommendationBlock}>
+                            <div>
+                              <strong>Recomendação</strong>
+                              <p>{match.recommendation}</p>
+                            </div>
                           </div>
                         </div>
-                      )}
 
-                      <div className={styles.cardInfo}>
-                        <div className={styles.reasoningBlock}>
-                          <p>{match.reasoning}</p>
+                        <div className={styles.actionButtons}>
+                          <button 
+                            id={`save-btn-${match.id}`}
+                            onClick={() => handleSaveOpportunity(match)}
+                            disabled={savingId === match.id}
+                            className={`${styles.interestButton} ${saved ? styles.saved : ''}`}
+                          >
+                            <i className={`fas ${saved ? 'fa-check' : 'fa-heart'}`}></i>
+                            {savingId === match.id ? 'Salvando...' : (saved ? 'Salvo' : 'Tenho interesse')}
+                          </button>
+                          <button 
+                            onClick={() => router.push(`/matches/${match.id}`)}
+                            className={styles.detailsButton}
+                          >
+                            <span>Ver detalhes</span>
+                            <i className="fas fa-arrow-right"></i>
+                          </button>
                         </div>
-                        <div className={styles.recommendationBlock}>
-                          <i className="fas fa-lightbulb"></i>
-                          <div>
-                            <strong>Recomendação</strong>
-                            <p>{match.recommendation}</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className={styles.actionButtons}>
-                        <button 
-                          id={`save-btn-${match.id}`}
-                          onClick={() => handleSaveOpportunity(match)}
-                          disabled={savingId === match.id}
-                          className={`${styles.interestButton} ${saved ? styles.saved : ''}`}
-                        >
-                          <i className={`fas ${saved ? 'fa-check' : 'fa-heart'}`}></i>
-                          {savingId === match.id ? 'Salvando...' : (saved ? 'Salvo' : 'Tenho interesse')}
-                        </button>
-                        <button 
-                          onClick={() => router.push(`/matches/${match.id}`)}
-                          className={styles.detailsButton}
-                        >
-                          <span>Ver detalhes</span>
-                          <i className="fas fa-arrow-right"></i>
-                        </button>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </>
         )}

@@ -1,3 +1,4 @@
+// page.tsx
 'use client';
 
 import { useRouter } from 'next/navigation';
@@ -6,22 +7,29 @@ import { useEffect, useState } from 'react';
 import styles from './page.module.css';
 import FloatingChatButton from '../components/OrchestrateChat/FloatingChatButton';
 
+interface GlobalGivingStats {
+  totalProjects: number;
+  totalOrganizations: number;
+  countriesReached: number;
+  totalDonations: number;
+}
+
 export default function HomePage() {
   const router = useRouter();
   const { user } = useAuth();
-  const [stats, setStats] = useState({
-    volunteers: 0,
-    organizations: 0,
-    matches: 0,
-    hours: 0
+  const [stats, setStats] = useState<GlobalGivingStats>({
+    totalProjects: 0,
+    totalOrganizations: 0,
+    countriesReached: 0,
+    totalDonations: 0
   });
 
   useEffect(() => {
     setStats({
-      volunteers: 15234,
-      organizations: 1250,
-      matches: 8750,
-      hours: 42500
+      totalProjects: 25000,
+      totalOrganizations: 5246,
+      countriesReached: 175,
+      totalDonations: 650
     });
   }, []);
 
@@ -40,59 +48,83 @@ export default function HomePage() {
   return (
     <div className={styles.homepage}>
       {/* Hero Section */}
-      <section className={styles.hero}>
-        <div className={styles.heroContainer}>
-          <div className={styles.heroLeft}>
-            <div className={styles.heroBadge}>
-              <i className="fas fa-microchip"></i>
-              <span>Inteligência Artificial</span>
-            </div>
-            <h1 className={styles.heroTitle}>
-              O voluntariado que<br />
-              <span className={styles.heroHighlight}>combina com você</span>
-            </h1>
-            <p className={styles.heroDescription}>
-              Conectamos suas habilidades e interesses às oportunidades de voluntariado 
-              mais alinhadas ao seu perfil, potencializando seu impacto social.
-            </p>
-            <div className={styles.heroButtons}>
-              <button onClick={handleGetStarted} className={styles.btnPrimary}>
-                Começar agora
-                <i className="fas fa-arrow-right"></i>
-              </button>
-              <button onClick={handleLogin} className={styles.btnSecondary}>
-                Já tenho conta
-              </button>
-            </div>
-            <div className={styles.heroStats}>
-              <div className={styles.heroStat}>
-                <span className={styles.heroStatNumber}>+{stats.volunteers.toLocaleString()}</span>
-                <span className={styles.heroStatLabel}>voluntários</span>
+      <div className={styles.welcomeArea} id="welcome">
+        <div className={styles.headerText}>
+          <div className={styles.container}>
+            <div className={styles.row}>
+              <div className={styles.leftText}>
+                <h1>
+                  Transforme vidas através <br />
+                  do <span>voluntariado</span>
+                </h1>
+                <p>
+                  Conectamos suas habilidades às melhores oportunidades de voluntariado 
+                  em organizações verificadas globalmente com tecnologia de ponta.
+                </p>
+                <div className={styles.buttons}>
+                  <button onClick={handleGetStarted} className={styles.mainButtonSlider}>
+                    Começar agora
+                  </button>
+                  <button onClick={handleLogin} className={styles.secondaryButton}>
+                    Já tenho conta
+                  </button>
+                </div>
+                <div className={styles.heroStats}>
+                  <div className={styles.heroStat}>
+                    <span className={styles.heroStatNumber}>{stats.totalOrganizations.toLocaleString()}</span>
+                    <span className={styles.heroStatLabel}>Organizações</span>
+                  </div>
+                  <div className={styles.heroStatDivider}></div>
+                  <div className={styles.heroStat}>
+                    <span className={styles.heroStatNumber}>{stats.countriesReached}</span>
+                    <span className={styles.heroStatLabel}>Países</span>
+                  </div>
+                  <div className={styles.heroStatDivider}></div>
+                  <div className={styles.heroStat}>
+                    <span className={styles.heroStatNumber}>{stats.totalProjects.toLocaleString()}+</span>
+                    <span className={styles.heroStatLabel}>Projetos</span>
+                  </div>
+                </div>
               </div>
-              <div className={styles.heroStatDivider}></div>
-              <div className={styles.heroStat}>
-                <span className={styles.heroStatNumber}>+{stats.organizations.toLocaleString()}</span>
-                <span className={styles.heroStatLabel}>organizações</span>
-              </div>
-              <div className={styles.heroStatDivider}></div>
-              <div className={styles.heroStat}>
-                <span className={styles.heroStatNumber}>{stats.matches.toLocaleString()}</span>
-                <span className={styles.heroStatLabel}>matches</span>
+              <div className={styles.rightImage}>
+                <img 
+                  src="https://media.istockphoto.com/id/941191996/photo/flood-preparation-in-the-okanagan.jpg?s=612x612&w=0&k=20&c=vFFdJwezZkyRI6Wnwg3SP9uZ22F6PLhzpQ2YaQwPpWo="
+                  alt="Voluntários ajudando comunidade"
+                  className={styles.heroImage}
+                />
               </div>
             </div>
           </div>
-          <div className={styles.heroRight}>
-            <div className={styles.heroImageWrapper}>
-              <img 
-                src="https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=600&h=500&fit=crop"
-                alt="Voluntários"
-                className={styles.heroImage}
-              />
-              <div className={styles.floatingCard}>
-                <i className="fas fa-check-circle"></i>
-                <div>
-                  <strong>Match encontrado</strong>
-                  <span>Compatibilidade: 92%</span>
+        </div>
+      </div>
+
+      {/* About Section 1 */}
+      <section className={styles.about} id="about">
+        <div className={styles.container}>
+          <div className={styles.row}>
+            <div className={styles.leftImage}>
+              <img src="https://images.unsplash.com/photo-1559027615-cd4628902d4a?w=500&h=400&fit=crop" alt="Voluntário" className={styles.aboutImage} />
+            </div>
+            <div className={styles.rightText}>
+              <h5>Conectando pessoas a causas que transformam vidas</h5>
+              <p>
+                Nossa plataforma utiliza inteligência artificial para conectar voluntários 
+                às oportunidades mais alinhadas às suas habilidades e interesses. 
+                Acreditamos que o voluntariado deve ser uma experiência enriquecedora 
+                tanto para quem doa tempo quanto para quem recebe ajuda.
+              </p>
+              <div className={styles.statsGrid}>
+                <div className={styles.statBox}>
+                  <div className={styles.statNumber}>{stats.totalOrganizations.toLocaleString()}</div>
+                  <div className={styles.statLabel}>ONGs parceiras</div>
+                </div>
+                <div className={styles.statBox}>
+                  <div className={styles.statNumber}>{stats.countriesReached}</div>
+                  <div className={styles.statLabel}>Países atendidos</div>
+                </div>
+                <div className={styles.statBox}>
+                  <div className={styles.statNumber}>${stats.totalDonations}M</div>
+                  <div className={styles.statLabel}>em impacto</div>
                 </div>
               </div>
             </div>
@@ -100,183 +132,106 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Stats Highlight */}
-      <section className={styles.statsHighlight}>
+      {/* About Section 2 - Features */}
+      <section className={styles.about2} id="about2">
         <div className={styles.container}>
-          <div className={styles.statsGrid}>
-            <div className={styles.statItem}>
-              <i className="fas fa-clock"></i>
-              <div>
-                <h3>{stats.hours.toLocaleString()}</h3>
-                <p>horas de voluntariado</p>
-              </div>
+          <div className={styles.row}>
+            <div className={styles.leftText}>
+              <h5>Tecnologia a favor do bem social</h5>
+              <p>
+                Combinamos o poder da IBM WatsonX com uma curadoria especializada 
+                para oferecer as melhores oportunidades de voluntariado.
+              </p>
+              <ul>
+                <li>
+                  <i className="fas fa-brain"></i>
+                  <div className={styles.text}>
+                    <h6>Match Inteligente</h6>
+                    <p>Algoritmos avançados que analisam perfil, habilidades e disponibilidade.</p>
+                  </div>
+                </li>
+                <li>
+                  <i className="fas fa-chart-line"></i>
+                  <div className={styles.text}>
+                    <h6>Score de Compatibilidade</h6>
+                    <p>Avaliação precisa do alinhamento entre você e as oportunidades.</p>
+                  </div>
+                </li>
+                <li>
+                  <i className="fas fa-sync-alt"></i>
+                  <div className={styles.text}>
+                    <h6>Aprendizado Contínuo</h6>
+                    <p>O sistema melhora constantemente suas recomendações.</p>
+                  </div>
+                </li>
+              </ul>
             </div>
-            <div className={styles.statDivider}></div>
-            <div className={styles.statItem}>
-              <i className="fas fa-handshake"></i>
-              <div>
-                <h3>+{stats.organizations.toLocaleString()}</h3>
-                <p>ONGs parceiras</p>
-              </div>
-            </div>
-            <div className={styles.statDivider}></div>
-            <div className={styles.statItem}>
-              <i className="fas fa-brain"></i>
-              <div>
-                <h3>IA exclusiva</h3>
-                <p>match inteligente</p>
-              </div>
+            <div className={styles.rightImage}>
+              <img src="https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?w=500&h=400&fit=crop" alt="Tecnologia" className={styles.aboutImage} />
             </div>
           </div>
         </div>
       </section>
 
-      {/* How It Works */}
-      <section className={styles.howItWorks}>
+      {/* Services / Features Section */}
+      <section className={styles.services} id="services">
         <div className={styles.container}>
-          <div className={styles.sectionHeader}>
-            <span className={styles.sectionTag}>Como funciona</span>
-            <h2 className={styles.sectionTitle}>
-              Tecnologia a favor do <span className={styles.titleHighlight}>bem</span>
-            </h2>
-            <p className={styles.sectionDescription}>
-              Um processo simples e eficiente para conectar você às melhores oportunidades
-            </p>
+          <div className={styles.sectionHeading}>
+            <h2>Por que escolher a <span>VoluntaRe</span></h2>
+            <p>Diferenciais que fazem a diferença na sua jornada de voluntariado</p>
           </div>
-          <div className={styles.stepsGrid}>
-            <div className={styles.stepCard}>
-              <div className={styles.stepNumber}>01</div>
-              <div className={styles.stepIcon}>
-                <i className="fas fa-user-edit"></i>
+          <div className={styles.servicesGrid}>
+            <div className={styles.serviceItem}>
+              <div className={styles.icon}>
+                <i className="fas fa-microchip"></i>
               </div>
-              <h3 className={styles.stepTitle}>Perfil completo</h3>
-              <p className={styles.stepDescription}>
-                Cadastre suas habilidades, experiências e disponibilidade de horário
-              </p>
+              <h5 className={styles.serviceTitle}>IA WatsonX</h5>
+              <p>Tecnologia de ponta da IBM para matches mais precisos e personalizados.</p>
+              <div className={styles.serviceMetric}>Precisão de 94%</div>
             </div>
-            <div className={styles.stepArrow}>
-              <i className="fas fa-arrow-right"></i>
-            </div>
-            <div className={styles.stepCard}>
-              <div className={styles.stepNumber}>02</div>
-              <div className={styles.stepIcon}>
-                <i className="fas fa-chart-line"></i>
-              </div>
-              <h3 className={styles.stepTitle}>Análise inteligente</h3>
-              <p className={styles.stepDescription}>
-                Nossa IA processa seu perfil e encontra as melhores correspondências
-              </p>
-            </div>
-            <div className={styles.stepArrow}>
-              <i className="fas fa-arrow-right"></i>
-            </div>
-            <div className={styles.stepCard}>
-              <div className={styles.stepNumber}>03</div>
-              <div className={styles.stepIcon}>
-                <i className="fas fa-heart"></i>
-              </div>
-              <h3 className={styles.stepTitle}>Impacto real</h3>
-              <p className={styles.stepDescription}>
-                Escolha a oportunidade e comece a transformar vidas
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Features Grid */}
-      <section className={styles.features}>
-        <div className={styles.container}>
-          <div className={styles.sectionHeader}>
-            <span className={styles.sectionTag}>Diferenciais</span>
-            <h2 className={styles.sectionTitle}>
-              Por que escolher a <span className={styles.titleHighlight}>VoluntaRe</span>
-            </h2>
-          </div>
-          <div className={styles.featuresGrid}>
-            <div className={styles.featureCard}>
-              <div className={styles.featureIcon}>
-                <i className="fas fa-robot"></i>
-              </div>
-              <h3 className={styles.featureTitle}>Match por IA</h3>
-              <p className={styles.featureDescription}>
-                Algoritmos avançados que analisam seu perfil e encontram as oportunidades 
-                mais alinhadas com suas habilidades
-              </p>
-            </div>
-            <div className={styles.featureCard}>
-              <div className={styles.featureIcon}>
-                <i className="fas fa-chart-simple"></i>
-              </div>
-              <h3 className={styles.featureTitle}>Métricas de impacto</h3>
-              <p className={styles.featureDescription}>
-                Acompanhe o impacto real das suas contribuições e visualize sua jornada 
-                de voluntariado
-              </p>
-            </div>
-            <div className={styles.featureCard}>
-              <div className={styles.featureIcon}>
-                <i className="fas fa-certificate"></i>
-              </div>
-              <h3 className={styles.featureTitle}>Certificações</h3>
-              <p className={styles.featureDescription}>
-                Receba certificados de participação e valorize seu currículo com 
-                experiências significativas
-              </p>
-            </div>
-            <div className={styles.featureCard}>
-              <div className={styles.featureIcon}>
+            <div className={styles.serviceItem}>
+              <div className={styles.icon}>
                 <i className="fas fa-shield-alt"></i>
               </div>
-              <h3 className={styles.featureTitle}>Segurança e confiança</h3>
-              <p className={styles.featureDescription}>
-                Organizações verificadas e ambiente seguro para sua jornada de voluntariado
-              </p>
+              <h5 className={styles.serviceTitle}>Organizações Verificadas</h5>
+              <p>100% das organizações parceiras passam por rigoroso processo de verificação.</p>
+              <div className={styles.serviceMetric}>+5.000 ONGs</div>
+            </div>
+            <div className={styles.serviceItem}>
+              <div className={styles.icon}>
+                <i className="fas fa-globe"></i>
+              </div>
+              <h5 className={styles.serviceTitle}>Impacto Global</h5>
+              <p>Conectamos voluntários a projetos em mais de 175 países ao redor do mundo.</p>
+              <div className={styles.serviceMetric}>175+ países</div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Impact Numbers */}
-      <section className={styles.impact}>
-        <div className={styles.impactContainer}>
-          <div className={styles.impactLeft}>
-            <div className={styles.impactBadge}>
-              <i className="fas fa-chart-line"></i>
-              <span>Impacto real</span>
-            </div>
-            <h2 className={styles.impactTitle}>
-              Números que mostram a <span className={styles.titleHighlight}>diferença que fazemos</span>
-            </h2>
-            <p className={styles.impactDescription}>
-              Cada conexão representa uma história de transformação. Veja o impacto 
-              que nossa comunidade já alcançou.
-            </p>
+      {/* GlobalGiving Stats Section */}
+      <section className={styles.globalStats}>
+        <div className={styles.container}>
+          <div className={styles.sectionHeading}>
+            <h2>Dados <span>Globais</span></h2>
+            <p>Rede GlobalGiving em números</p>
           </div>
-          <div className={styles.impactRight}>
-            <div className={styles.impactCard}>
-              <div className={styles.impactNumber}>+{stats.volunteers.toLocaleString()}</div>
-              <div className={styles.impactLabel}>voluntários ativos</div>
-              <div className={styles.impactTrend}>
-                <i className="fas fa-arrow-up"></i>
-                <span>+23% este ano</span>
-              </div>
+          <div className={styles.globalStatsGrid}>
+            <div className={styles.globalStatItem}>
+              <div className={styles.globalStatNumber}>${stats.totalDonations}M+</div>
+              <div className={styles.globalStatLabel}>em doações facilitadas</div>
             </div>
-            <div className={styles.impactCard}>
-              <div className={styles.impactNumber}>{stats.hours.toLocaleString()}</div>
-              <div className={styles.impactLabel}>horas doadas</div>
-              <div className={styles.impactTrend}>
-                <i className="fas fa-arrow-up"></i>
-                <span>+15% este mês</span>
-              </div>
+            <div className={styles.globalStatItem}>
+              <div className={styles.globalStatNumber}>{stats.countriesReached}</div>
+              <div className={styles.globalStatLabel}>países e territórios</div>
             </div>
-            <div className={styles.impactCard}>
-              <div className={styles.impactNumber}>{stats.matches.toLocaleString()}</div>
-              <div className={styles.impactLabel}>conexões realizadas</div>
-              <div className={styles.impactTrend}>
-                <i className="fas fa-arrow-up"></i>
-                <span>+42% este ano</span>
-              </div>
+            <div className={styles.globalStatItem}>
+              <div className={styles.globalStatNumber}>{stats.totalOrganizations.toLocaleString()}</div>
+              <div className={styles.globalStatLabel}>organizações verificadas</div>
+            </div>
+            <div className={styles.globalStatItem}>
+              <div className={styles.globalStatNumber}>{stats.totalProjects.toLocaleString()}+</div>
+              <div className={styles.globalStatLabel}>projetos ativos</div>
             </div>
           </div>
         </div>
@@ -284,23 +239,25 @@ export default function HomePage() {
 
       {/* CTA Section */}
       <section className={styles.cta}>
-        <div className={styles.ctaContainer}>
-          <div className={styles.ctaIcon}>
-            <i className="fas fa-hand-peace"></i>
+        <div className={styles.container}>
+          <div className={styles.ctaContent}>
+            <div className={styles.ctaIcon}>
+              <i className="fas fa-hand-peace"></i>
+            </div>
+            <h2>Pronto para transformar vidas?</h2>
+            <p>
+              Junte-se a milhares de voluntários que já estão fazendo a diferença 
+              através da nossa plataforma.
+            </p>
+            <button onClick={handleGetStarted} className={styles.mainButton}>
+              Criar conta gratuitamente
+            </button>
+            <div className={styles.ctaNote}>Cadastro gratuito • Sem compromisso • Comece agora</div>
           </div>
-          <h2 className={styles.ctaTitle}>Junte-se a essa corrente do bem</h2>
-          <p className={styles.ctaDescription}>
-            Milhares de pessoas já estão transformando vidas através do voluntariado. 
-            Sua jornada começa agora.
-          </p>
-          <button onClick={handleGetStarted} className={styles.btnPrimary}>
-            Criar conta gratuitamente
-            <i className="fas fa-arrow-right"></i>
-          </button>
-          <p className={styles.ctaNote}>✓ Sem compromisso • ✓ 100% gratuito • ✓ Cancelamento a qualquer momento</p>
         </div>
       </section>
-      <FloatingChatButton/>
+
+      <FloatingChatButton />
     </div>
   );
 }

@@ -106,8 +106,7 @@ export default function LoginForm() {
         <div className={styles.imageSide}>
           <div className={styles.imageContent}>
             <div className={styles.logo}>
-              <span className={styles.logoHeart}>❤️</span>
-              <span className={styles.logoText}>Volunta<span>Re</span></span>
+              <img src="logo.png"></img>
             </div>
             
             <div className={styles.imageTitle}>

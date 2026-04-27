@@ -1,148 +1,163 @@
-/* =========================
-   PAGE CONTAINER
-========================= */
+/* page.module.css */
+/* 
+---------------------------------------------
+Base Styles
+--------------------------------------------- 
+*/
 .homepage {
   width: 100%;
-  background: var(--color-background);
+  font-family: "Roboto", sans-serif;
+  overflow-x: hidden;
 }
 
 .container {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 0 2rem;
+  padding: 0 15px;
 }
 
-/* =========================
-   BUTTONS
-========================= */
-.btnPrimary {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.875rem 1.75rem;
-  background: var(--color-primary);
-  color: white;
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  margin-right: -15px;
+  margin-left: -15px;
+}
+
+/* 
+---------------------------------------------
+Buttons
+--------------------------------------------- 
+*/
+.mainButtonSlider {
+  font-size: 13px;
+  border-radius: 20px;
+  padding: 12px 20px;
+  background-color: #f55858;
+  text-transform: uppercase;
+  color: #fff;
+  letter-spacing: 0.25px;
+  transition: all 0.3s ease 0s;
   border: none;
-  border-radius: 0.75rem;
-  font-size: 1rem;
-  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
 }
 
-.btnPrimary i {
-  font-size: 0.875rem;
-  transition: transform 0.2s ease;
+.mainButtonSlider:hover {
+  background-color: #0088e8;
 }
 
-.btnPrimary:hover {
-  background: var(--color-primary-dark);
-  transform: translateY(-2px);
-}
-
-.btnPrimary:hover i {
-  transform: translateX(4px);
-}
-
-.btnSecondary {
-  padding: 0.875rem 1.75rem;
-  background: transparent;
-  color: var(--color-text-secondary);
-  border: 1px solid var(--color-text-secondary);
-  border-radius: 0.75rem;
-  font-size: 1rem;
-  font-weight: 500;
+.secondaryButton {
+  font-size: 13px;
+  border-radius: 20px;
+  padding: 12px 20px;
+  background-color: transparent;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: 0.25px;
+  transition: all 0.3s ease 0s;
+  border: 1.5px solid rgba(255, 255, 255, 0.5);
   cursor: pointer;
-  transition: all 0.2s ease;
+  margin-left: 12px;
 }
 
-.btnSecondary:hover {
-  background: rgba(0, 0, 0, 0.02);
+.secondaryButton:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.8);
+  color: white;
 }
 
-/* =========================
-   HERO SECTION
-========================= */
-.hero {
-  background: var(--color-background-dark);
-  padding: 5rem 2rem;
-  position: relative;
+.mainButton {
+  font-size: 13px;
+  border-radius: 20px;
+  padding: 12px 20px;
+  background-color: #f55858;
+  text-transform: uppercase;
+  color: #fff;
+  letter-spacing: 0.25px;
+  transition: all 0.3s ease 0s;
+  border: none;
+  cursor: pointer;
+}
+
+.mainButton:hover {
+  background-color: #0088e8;
+}
+
+/* 
+---------------------------------------------
+Welcome / Hero Section
+--------------------------------------------- 
+*/
+.welcomeArea {
   overflow: hidden;
-}
-
-.hero::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: radial-gradient(circle at 70% 30%, rgba(255, 255, 255, 0.05) 0%, transparent 60%);
-  pointer-events: none;
-}
-
-.heroContainer {
-  max-width: 1200px;
-  margin: 0 auto;
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 4rem;
-  position: relative;
-  z-index: 1;
+  justify-content: center;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  width: 100%;
+  min-height: 600px;
+  padding: 100px 0;
 }
 
-.heroLeft {
+.headerText {
+  width: 100%;
+}
+
+.headerText .leftText {
   flex: 1;
+  padding: 0 15px;
 }
 
-.heroBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 0.5rem 1rem;
-  border-radius: 2rem;
-  font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.9);
-  margin-bottom: 1.5rem;
-}
-
-.heroBadge i {
-  font-size: 0.875rem;
-}
-
-.heroTitle {
-  font-size: 3rem;
+.headerText .leftText h1 {
   font-weight: 700;
+  font-size: 52px;
   line-height: 1.2;
-  color: white;
-  margin-bottom: 1.5rem;
+  letter-spacing: -0.02em;
+  margin-bottom: 20px;
+  color: #fff;
 }
 
-.heroHighlight {
-  color: #e9d8b4;
+.headerText .leftText h1 span {
+  font-weight: 800;
+  color: #f55858;
   position: relative;
+  display: inline-block;
 }
 
-.heroDescription {
-  font-size: 1.125rem;
-  color: rgba(255, 255, 255, 0.7);
-  line-height: 1.6;
-  margin-bottom: 2rem;
+.headerText .leftText h1 span::after {
+  content: '';
+  position: absolute;
+  bottom: -8px;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #f55858, transparent);
+  border-radius: 2px;
+}
+
+.headerText .leftText p {
+  font-weight: 300;
+  font-size: 17px;
+  color: rgba(255, 255, 255, 0.8);
+  line-height: 30px;
+  letter-spacing: 0.25px;
+  margin-bottom: 40px;
+  position: relative;
   max-width: 500px;
 }
 
-.heroButtons {
+.buttons {
   display: flex;
   gap: 1rem;
-  margin-bottom: 2rem;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
 }
 
 .heroStats {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 2rem;
+  flex-wrap: wrap;
 }
 
 .heroStat {
@@ -151,518 +166,509 @@
 }
 
 .heroStatNumber {
-  font-size: 1.5rem;
+  font-size: 1.75rem;
   font-weight: 700;
   color: white;
+  letter-spacing: -0.02em;
 }
 
 .heroStatLabel {
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .heroStatDivider {
   width: 1px;
-  height: 30px;
-  background: rgba(255, 255, 255, 0.2);
+  height: 40px;
+  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.3), transparent);
 }
 
-.heroRight {
+.headerText .rightImage {
   flex: 1;
-}
-
-.heroImageWrapper {
-  position: relative;
+  padding: 0 15px;
 }
 
 .heroImage {
   width: 100%;
-  max-width: 480px;
+  max-width: 500px;
   height: auto;
-  border-radius: 1.5rem;
+  border-radius: 20px;
   box-shadow: 0 20px 35px -10px rgba(0, 0, 0, 0.3);
 }
 
-.floatingCard {
-  position: absolute;
-  bottom: 30px;
-  right: -20px;
-  background: white;
-  padding: 0.75rem 1.25rem;
-  border-radius: 1rem;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+/* 
+---------------------------------------------
+About Section 1
+--------------------------------------------- 
+*/
+.about {
+  padding: 120px 0;
+  border-bottom: 1px solid #eee;
 }
 
-.floatingCard i {
-  font-size: 1.25rem;
-  color: #22c55e;
+.about .leftImage {
+  flex: 1;
+  padding: 0 15px;
 }
 
-.floatingCard strong {
-  display: block;
-  font-size: 0.875rem;
-  color: #1a202c;
+.aboutImage {
+  width: 100%;
+  max-width: 500px;
+  height: auto;
+  border-radius: 20px;
 }
 
-.floatingCard span {
-  font-size: 0.75rem;
-  color: #718096;
+.about .rightText {
+  flex: 1;
+  padding: 0 15px;
+  align-self: center;
 }
 
-/* =========================
-   STATS HIGHLIGHT
-========================= */
-.statsHighlight {
-  padding: 3rem 2rem;
-  background: var(--color-background);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+.about h5 {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1e1e1e;
+  line-height: 40px;
+  margin-bottom: 25px;
+  letter-spacing: 0.5px;
+}
+
+.about p {
+  margin-bottom: 30px;
+  font-size: 16px;
+  line-height: 30px;
+  letter-spacing: 0.5px;
+  color: #4a4a4a;
 }
 
 .statsGrid {
-  max-width: 900px;
-  margin: 0 auto;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
   gap: 2rem;
+  margin-top: 30px;
 }
 
-.statItem {
+.statBox {
+  text-align: center;
+}
+
+.statNumber {
+  font-size: 28px;
+  font-weight: 700;
+  color: #f55858;
+  margin-bottom: 5px;
+}
+
+.statLabel {
+  font-size: 14px;
+  color: #777;
+}
+
+/* 
+---------------------------------------------
+About Section 2 - Features
+--------------------------------------------- 
+*/
+.about2 {
+  padding: 120px 0;
+  background-color: #fff;
+}
+
+.about2 .leftText {
+  flex: 1;
+  padding: 0 15px;
+  align-self: center;
+}
+
+.about2 .leftText h5 {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1e1e1e;
+  line-height: 40px;
+  margin-bottom: 25px;
+  letter-spacing: 0.5px;
+}
+
+.about2 .leftText p {
+  margin-bottom: 30px;
+  font-size: 16px;
+  line-height: 30px;
+  letter-spacing: 0.5px;
+  color: #4a4a4a;
+}
+
+.about2 ul {
+  list-style: none;
+  padding: 0;
+}
+
+.about2 ul li {
+  display: flex;
+  margin-bottom: 30px;
+}
+
+.about2 ul li i {
+  font-size: 30px;
+  color: #f55858;
+  margin-right: 20px;
+  width: 50px;
+}
+
+.about2 ul li .text {
+  flex: 1;
+}
+
+.about2 ul li .text h6 {
+  font-size: 18px;
+  font-weight: 500;
+  color: #1e1e1e;
+  margin-bottom: 10px;
+}
+
+.about2 ul li .text p {
+  font-size: 14px;
+  line-height: 24px;
+  margin-bottom: 0;
+}
+
+.about2 .rightImage {
+  flex: 1;
+  padding: 0 15px;
+}
+
+/* 
+---------------------------------------------
+Services Section
+--------------------------------------------- 
+*/
+.services {
+  padding: 120px 0 90px 0;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+}
+
+.sectionHeading {
+  text-align: center;
+  margin-bottom: 60px;
+}
+
+.sectionHeading h2 {
+  font-size: 48px;
+  font-weight: 300;
+  color: #fff;
+  margin-bottom: 20px;
+}
+
+.sectionHeading h2 span {
+  color: #f55858;
+  font-weight: 700;
+}
+
+.sectionHeading p {
+  font-size: 17px;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+}
+
+.servicesGrid {
+  display: flex;
+  gap: 30px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.serviceItem {
+  flex: 1;
+  min-width: 280px;
+  background: #fff;
+  box-shadow: 0 2px 48px 0 rgba(0, 0, 0, 0.1);
+  padding: 40px 30px;
+  text-align: center;
+  transition: all 0.3s ease 0s;
+  border-radius: 20px;
+}
+
+.serviceItem:hover {
+  transform: translateY(-10px);
+}
+
+.serviceItem .icon {
+  width: 80px;
+  height: 80px;
+  line-height: 80px;
+  margin: auto;
+  margin-bottom: 30px;
+  background: rgba(245, 88, 88, 0.1);
+  border-radius: 50%;
   display: flex;
   align-items: center;
-  gap: 1rem;
+  justify-content: center;
 }
 
-.statItem i {
-  font-size: 2rem;
-  color: var(--color-primary);
+.serviceItem .icon i {
+  font-size: 36px;
+  color: #f55858;
 }
 
-.statItem h3 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin-bottom: 0.25rem;
+.serviceTitle {
+  font-weight: 500;
+  font-size: 18px;
+  color: #1e1e1e;
+  letter-spacing: 0.7px;
+  margin-bottom: 15px;
 }
 
-.statItem p {
-  font-size: 0.75rem;
-  color: #718096;
+.serviceItem p {
+  font-weight: 400;
+  font-size: 13px;
+  color: #777;
+  letter-spacing: 0.5px;
+  line-height: 25px;
+  margin-bottom: 20px;
 }
 
-.statDivider {
-  width: 1px;
-  height: 40px;
-  background: rgba(0, 0, 0, 0.1);
-}
-
-/* =========================
-   HOW IT WORKS
-========================= */
-.howItWorks {
-  padding: 5rem 2rem;
-  background: var(--color-background);
-}
-
-.sectionHeader {
-  text-align: center;
-  margin-bottom: 3rem;
-}
-
-.sectionTag {
+.serviceMetric {
   display: inline-block;
-  font-size: 0.75rem;
+  padding: 5px 15px;
+  background: rgba(245, 88, 88, 0.1);
+  border-radius: 20px;
+  font-size: 12px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--color-primary);
-  margin-bottom: 1rem;
+  color: #f55858;
 }
 
-.sectionTitle {
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin-bottom: 1rem;
+/* 
+---------------------------------------------
+Global Stats Section
+--------------------------------------------- 
+*/
+.globalStats {
+  padding: 80px 0;
+  background: #f8f9fa;
 }
 
-.titleHighlight {
-  color: var(--color-primary);
+.globalStats .sectionHeading h2 {
+  color: #1e1e1e;
 }
 
-.sectionDescription {
-  font-size: 1rem;
-  color: #718096;
-  max-width: 600px;
+.globalStats .sectionHeading p {
+  color: #777;
+}
+
+.globalStatsGrid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 40px;
+  max-width: 1000px;
   margin: 0 auto;
 }
 
-.stepsGrid {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 1rem;
-}
-
-.stepCard {
-  flex: 1;
+.globalStatItem {
   text-align: center;
-  padding: 2rem;
-  background: white;
-  border-radius: 1rem;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-  transition: transform 0.2s ease;
+  min-width: 200px;
 }
 
-.stepCard:hover {
-  transform: translateY(-4px);
-}
-
-.stepNumber {
-  width: 40px;
-  height: 40px;
-  background: var(--color-primary);
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  margin: 0 auto 1rem;
-}
-
-.stepIcon {
-  width: 70px;
-  height: 70px;
-  background: rgba(176, 38, 41, 0.1);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 1rem;
-}
-
-.stepIcon i {
-  font-size: 1.75rem;
-  color: var(--color-primary);
-}
-
-.stepTitle {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin-bottom: 0.5rem;
-}
-
-.stepDescription {
-  font-size: 0.875rem;
-  color: #718096;
-  line-height: 1.5;
-}
-
-.stepArrow {
-  color: #cbd5e0;
-  font-size: 1.25rem;
-}
-
-/* =========================
-   FEATURES GRID
-========================= */
-.features {
-  padding: 5rem 2rem;
-  background: white;
-}
-
-.featuresGrid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 2rem;
-}
-
-.featureCard {
-  text-align: center;
-  padding: 1.5rem;
-  background: var(--color-background);
-  border-radius: 1rem;
-  transition: all 0.3s ease;
-}
-
-.featureCard:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
-}
-
-.featureIcon {
-  width: 60px;
-  height: 60px;
-  background: rgba(176, 38, 41, 0.1);
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin: 0 auto 1rem;
-}
-
-.featureIcon i {
-  font-size: 1.5rem;
-  color: var(--color-primary);
-}
-
-.featureTitle {
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--color-text);
-  margin-bottom: 0.75rem;
-}
-
-.featureDescription {
-  font-size: 0.875rem;
-  color: #718096;
-  line-height: 1.5;
-}
-
-/* =========================
-   IMPACT SECTION
-========================= */
-.impact {
-  padding: 5rem 2rem;
-  background: var(--color-background);
-}
-
-.impactContainer {
-  max-width: 1200px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 4rem;
-}
-
-.impactLeft {
-  flex: 1;
-}
-
-.impactBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  background: rgba(176, 38, 41, 0.1);
-  padding: 0.5rem 1rem;
-  border-radius: 2rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--color-primary);
-  margin-bottom: 1rem;
-}
-
-.impactTitle {
-  font-size: 2rem;
-  font-weight: 700;
-  color: var(--color-text);
-  margin-bottom: 1rem;
-}
-
-.impactDescription {
-  font-size: 1rem;
-  color: #718096;
-  line-height: 1.6;
-}
-
-.impactRight {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 1.5rem;
-}
-
-.impactCard {
-  background: white;
-  padding: 1.5rem;
-  border-radius: 1rem;
-  text-align: center;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-}
-
-.impactNumber {
-  font-size: 2rem;
+.globalStatNumber {
+  font-size: 42px;
   font-weight: 800;
-  color: var(--color-primary);
-  margin-bottom: 0.5rem;
+  color: #f55858;
+  margin-bottom: 10px;
 }
 
-.impactLabel {
-  font-size: 0.75rem;
-  color: #718096;
-  margin-bottom: 0.75rem;
+.globalStatLabel {
+  font-size: 14px;
+  color: #777;
 }
 
-.impactTrend {
-  font-size: 0.7rem;
-  color: #22c55e;
-}
-
-.impactTrend i {
-  font-size: 0.65rem;
-  margin-right: 0.25rem;
-}
-
-/* =========================
-   CTA SECTION
-========================= */
+/* 
+---------------------------------------------
+CTA Section
+--------------------------------------------- 
+*/
 .cta {
-  padding: 5rem 2rem;
-  background: linear-gradient(135deg, var(--color-background-dark) 0%, #1a2a3a 100%);
+  padding: 120px 0;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
   text-align: center;
 }
 
-.ctaContainer {
+.ctaContent {
   max-width: 700px;
   margin: 0 auto;
 }
 
 .ctaIcon {
-  width: 70px;
-  height: 70px;
-  background: rgba(255, 255, 255, 0.1);
+  width: 80px;
+  height: 80px;
+  background: rgba(245, 88, 88, 0.2);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 1.5rem;
+  margin: 0 auto 30px;
 }
 
 .ctaIcon i {
-  font-size: 2rem;
-  color: white;
+  font-size: 40px;
+  color: #f55858;
 }
 
-.ctaTitle {
-  font-size: 2rem;
+.cta h2 {
+  font-size: 36px;
   font-weight: 700;
-  color: white;
-  margin-bottom: 1rem;
+  color: #fff;
+  margin-bottom: 20px;
 }
 
-.ctaDescription {
-  font-size: 1rem;
+.cta p {
+  font-size: 16px;
   color: rgba(255, 255, 255, 0.7);
-  margin-bottom: 2rem;
+  margin-bottom: 30px;
   line-height: 1.6;
 }
 
 .ctaNote {
-  margin-top: 1rem;
-  font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
+  margin-top: 20px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
 }
 
-/* =========================
-   RESPONSIVE
-========================= */
-@media (max-width: 968px) {
-  .heroContainer {
+/* 
+---------------------------------------------
+Responsive
+--------------------------------------------- 
+*/
+@media (max-width: 992px) {
+  .headerText .row {
     flex-direction: column;
     text-align: center;
   }
   
-  .heroDescription {
-    margin: 0 auto 2rem;
-  }
-  
-  .heroButtons {
-    justify-content: center;
-  }
-  
-  .heroStats {
-    justify-content: center;
-  }
-  
-  .featuresGrid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .stepsGrid {
-    flex-direction: column;
-  }
-  
-  .stepArrow {
-    transform: rotate(90deg);
-  }
-  
-  .stepCard {
-    width: 100%;
-    max-width: 350px;
-    margin: 0 auto;
-  }
-  
-  .impactContainer {
-    flex-direction: column;
-    text-align: center;
-  }
-  
-  .impactBadge {
+  .headerText .leftText p {
+    max-width: 100%;
     margin-left: auto;
     margin-right: auto;
   }
   
-  .statsGrid {
-    flex-wrap: wrap;
+  .heroStats {
     justify-content: center;
+  }
+  
+  .buttons {
+    justify-content: center;
+  }
+  
+  .about .row,
+  .about2 .row {
+    flex-direction: column;
+    text-align: center;
+  }
+  
+  .statsGrid {
+    justify-content: center;
+  }
+  
+  .about2 ul li {
+    text-align: left;
+  }
+  
+  .servicesGrid {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .serviceItem {
+    max-width: 400px;
+    width: 100%;
+  }
+  
+  .globalStatsGrid {
+    gap: 30px;
+  }
+  
+  .globalStatNumber {
+    font-size: 32px;
   }
 }
 
-@media (max-width: 640px) {
-  .heroTitle {
-    font-size: 2rem;
+@media (max-width: 768px) {
+  .headerText .leftText h1 {
+    font-size: 36px;
   }
   
-  .heroButtons {
-    flex-direction: column;
-    width: 100%;
+  .sectionHeading h2 {
+    font-size: 32px;
   }
   
-  .heroButtons button {
-    width: 100%;
-    justify-content: center;
+  .cta h2 {
+    font-size: 28px;
   }
   
   .heroStats {
-    flex-wrap: wrap;
     gap: 1rem;
   }
   
-  .sectionTitle {
-    font-size: 1.5rem;
+  .heroStatNumber {
+    font-size: 1.25rem;
   }
   
-  .featuresGrid {
-    grid-template-columns: 1fr;
+  .about,
+  .about2,
+  .services,
+  .globalStats,
+  .cta {
+    padding: 60px 0;
   }
   
-  .impactRight {
-    grid-template-columns: 1fr;
+  .secondaryButton {
+    margin-left: 0;
+  }
+}
+
+@media (max-width: 576px) {
+  .headerText .leftText h1 {
+    font-size: 28px;
   }
   
-  .ctaTitle {
-    font-size: 1.5rem;
+  .heroStats {
+    flex-direction: column;
+    gap: 0.5rem;
   }
   
-  .floatingCard {
+  .heroStatDivider {
     display: none;
+  }
+  
+  .buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .mainButtonSlider,
+  .secondaryButton {
+    width: 100%;
+    max-width: 200px;
+    margin: 0;
   }
   
   .statsGrid {
     flex-direction: column;
-    align-items: stretch;
+    gap: 1rem;
   }
   
-  .statDivider {
-    display: none;
+  .globalStatsGrid {
+    flex-direction: column;
+    align-items: center;
   }
   
-  .statItem {
-    justify-content: center;
+  .about2 ul li {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+  
+  .about2 ul li i {
+    margin-right: 0;
+    margin-bottom: 15px;
   }
 }

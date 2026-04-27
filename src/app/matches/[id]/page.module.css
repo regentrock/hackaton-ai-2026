@@ -90,7 +90,7 @@
 }
 
 /* =========================
-   TOP NAV BAR
+   TOP NAV BAR - APENAS BOTÃO VOLTAR
 ========================= */
 .topBar {
   border-bottom: 1px solid #ede8e2;
@@ -139,53 +139,17 @@
   transform: translateX(-3px);
 }
 
+/* Botões de ação removidos */
 .topBarActions {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
+  display: none;
 }
 
 .saveButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.45rem 1rem;
-  background: transparent;
-  border: 1px solid #ddd7cf;
-  border-radius: 2rem;
-  font-size: 0.75rem;
-  font-weight: 500;
-  font-family: 'DM Sans', sans-serif;
-  color: #6b7280;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.saveButton:hover {
-  border-color: var(--color-primary);
-  color: var(--color-primary);
+  display: none;
 }
 
 .contactButton {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.45rem 1.1rem;
-  background: var(--color-primary);
-  border: none;
-  border-radius: 2rem;
-  font-size: 0.75rem;
-  font-weight: 600;
-  font-family: 'DM Sans', sans-serif;
-  color: white;
-  cursor: pointer;
-  transition: all 0.2s;
-  letter-spacing: 0.01em;
-}
-
-.contactButton:hover {
-  background: var(--color-primary-dark);
-  box-shadow: 0 4px 12px rgba(176, 38, 41, 0.25);
+  display: none;
 }
 
 /* =========================
@@ -715,6 +679,9 @@
   font-weight: 500;
 }
 
+/* =========================
+   CTA BLOCK - BOTÃO TENHO INTERESSE COM SALVAR
+========================= */
 .ctaBlock {
   background: var(--color-primary);
   border-radius: 1.25rem;
@@ -750,11 +717,24 @@
   cursor: pointer;
   transition: all 0.2s;
   letter-spacing: 0.01em;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
 }
 
-.ctaButton:hover {
+.ctaButton i {
+  font-size: 0.7rem;
+}
+
+.ctaButton:hover:not(:disabled) {
   background: #fdf0f0;
   transform: translateY(-1px);
+}
+
+.ctaButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 .disclaimer {
@@ -768,22 +748,6 @@
 .disclaimer i {
   margin-right: 0.25rem;
   opacity: 0.6;
-}
-
-/* Adicione ao final do arquivo */
-.saveButton.saved {
-  background: #10b981;
-  border-color: #10b981;
-  color: white;
-}
-
-.saveButton.saved i {
-  color: white;
-}
-
-.saveButton:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
 }
 
 /* =========================
@@ -845,6 +809,7 @@
     padding: 1rem 1.25rem;
   }
 
+  /* Botões de ação continuam escondidos */
   .topBarActions .saveButton {
     display: none;
   }
