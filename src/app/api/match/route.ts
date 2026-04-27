@@ -1,4 +1,4 @@
-// app/api/match/route.ts - VERSÃO CORRIGIDA COM TIPAGEM COMPLETA
+// app/api/match/route.ts - VERSÃO COM IBM WATSONX REAL
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/src/lib/auth/authUtils';
 
@@ -45,12 +45,12 @@ let cachedProjects: Opportunity[] = [];
 let cacheTimestamp = 0;
 const CACHE_DURATION = 5 * 60 * 1000;
 
-// Cache para análise do perfil do usuário
-let userProfileCache: Map<string, { timestamp: number, profile: any }> = new Map();
+// Cache para análise semântica do usuário
+let userSemanticCache: Map<string, { timestamp: number, analysis: any }> = new Map();
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
-  console.log('\n🚀 ========== MATCH API OTIMIZADA ==========');
+  console.log('\n🚀 ========== MATCH API COM IBM WATSONX REAL ==========');
   
   try {
     // 1. Autenticação
@@ -95,9 +95,33 @@ export async function GET(request: NextRequest) {
 
     console.log('👤 Usuário:', user.name);
     console.log('🎯 Skills:', user.skills);
-    console.log('📝 Sobre:', user.description?.substring(0, 100));
+    console.log('📝 Sobre:', user.description?.substring(0, 200) || 'Não informado');
 
-    // 3. Buscar oportunidades
+    // 3. Verificar se temos credenciais da IBM WatsonX
+    const hasWatsonX = !!(process.env.IBM_API_KEY && process.env.IBM_PROJECT_ID);
+    
+    if (!hasWatsonX) {
+      console.error('❌ IBM WatsonX credentials not found!');
+      return NextResponse.json({
+        success: false,
+        error: 'IBM WatsonX não configurado. Configure IBM_API_KEY e IBM_PROJECT_ID no .env'
+      }, { status: 500 });
+    }
+
+    // 4. Analisar perfil do usuário com WatsonX (análise semântica real)
+    let userSemanticAnalysis = userSemanticCache.get(user.id)?.analysis;
+    const now = Date.now();
+    
+    if (!userSemanticAnalysis || (now - (userSemanticCache.get(user.id)?.timestamp || 0)) > 60 * 60 * 1000) {
+      console.log('🧠 Enviando perfil para análise semântica da IBM WatsonX...');
+      userSemanticAnalysis = await analyzeUserSemanticallyWithWatsonX(user);
+      userSemanticCache.set(user.id, { timestamp: now, analysis: userSemanticAnalysis });
+      console.log('✅ Análise semântica concluída:', JSON.stringify(userSemanticAnalysis, null, 2));
+    } else {
+      console.log('📦 Usando análise semântica em cache');
+    }
+
+    // 5. Buscar oportunidades
     let opportunities = await fetchOpportunitiesWithCache();
     
     if (opportunities.length === 0) {
@@ -108,49 +132,24 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    console.log(`📦 ${opportunities.length} oportunidades encontradas`);
+    console.log(`📦 ${opportunities.length} oportunidades para analisar`);
 
-    // 4. Tentar usar IBM WatsonX para análise (opcional, se falhar usa local)
-    let usingAI = false;
-    
-    try {
-      // Verificar se temos credenciais IBM
-      if (process.env.IBM_API_KEY && process.env.IBM_PROJECT_ID) {
-        usingAI = true;
-        console.log('🧠 IBM WatsonX disponível para análise');
-      }
-    } catch (error) {
-      console.log('⚠️ WatsonX não disponível, usando algoritmo local');
-      usingAI = false;
-    }
+    // 6. Analisar cada oportunidade com WatsonX (análise semântica)
+    const matches = await analyzeOpportunitiesWithWatsonX(userSemanticAnalysis, opportunities);
 
-    // 5. Calcular matches
-    const matches = calculateMatchesLocally(user, opportunities);
-
-    // 6. Ordenar por score
+    // 7. Ordenar por score
     matches.sort((a, b) => b.matchScore - a.matchScore);
     
-    // 7. Log dos resultados
-    console.log('\n📊 DISTRIBUIÇÃO DOS SCORES:');
-    const ranges = [
-      { min: 80, max: 100, label: '🔥 Excelente (80-100%)' },
-      { min: 65, max: 79, label: '👍 Muito Bom (65-79%)' },
-      { min: 50, max: 64, label: '💡 Bom (50-64%)' },
-      { min: 35, max: 49, label: '📌 Médio (35-49%)' },
-      { min: 0, max: 34, label: '🌱 Desenvolvimento (0-34%)' }
-    ];
+    // 8. Log dos resultados
+    console.log('\n📊 RESULTADOS DA ANÁLISE SEMÂNTICA:');
+    console.log(`   🔥 Alta compatibilidade (70-100%): ${matches.filter(m => m.matchScore >= 70).length}`);
+    console.log(`   📌 Média compatibilidade (45-69%): ${matches.filter(m => m.matchScore >= 45 && m.matchScore < 70).length}`);
+    console.log(`   🌱 Baixa compatibilidade (0-44%): ${matches.filter(m => m.matchScore < 45).length}`);
     
-    ranges.forEach(range => {
-      const count = matches.filter((m: MatchResult) => m.matchScore >= range.min && m.matchScore <= range.max).length;
-      if (count > 0) console.log(`   ${range.label}: ${count} oportunidades`);
-    });
-    
-    console.log('\n🏆 TOP 10 MATCHES:');
-    matches.slice(0, 10).forEach((m: MatchResult, i: number) => {
+    console.log('\n🏆 TOP 10 MATCHES (Analisados por IA):');
+    matches.slice(0, 10).forEach((m, i) => {
       console.log(`   ${i+1}. ${m.matchScore}% - ${m.title.substring(0, 55)}...`);
-      if (m.matchedSkills.length > 0) {
-        console.log(`      Skills: ${m.matchedSkills.slice(0, 3).join(', ')}`);
-      }
+      console.log(`      Reasoning: ${m.reasoning.substring(0, 80)}...`);
     });
 
     return NextResponse.json({
@@ -158,160 +157,223 @@ export async function GET(request: NextRequest) {
       matches: matches.slice(0, 50),
       total: matches.length,
       userSkills: user.skills || [],
+      userSemanticAnalysis: userSemanticAnalysis,
       executionTimeMs: Date.now() - startTime,
-      usingAI: usingAI,
-      algorithm: usingAI ? 'ibm-watsonx' : 'smart-matching'
+      usingAI: true,
+      aiProvider: 'IBM WatsonX',
+      aiModel: 'llama-3-2-3b-instruct'
     });
 
   } catch (error: any) {
     console.error('❌ ERRO NA API:', error);
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: error.message || 'Internal server error', details: error.toString() },
       { status: 500 }
     );
   }
 }
 
-// Algoritmo de matching local melhorado
-function calculateMatchesLocally(user: UserProfile, opportunities: Opportunity[]): MatchResult[] {
-  const userSkills: string[] = user.skills?.map((s: string) => s.toLowerCase()) || [];
-  const userDescription: string = (user.description || '').toLowerCase();
-  const userLocation: string = (user.location || '').toLowerCase();
-  
-  const results: MatchResult[] = [];
+// Função para analisar semanticamente o perfil do usuário com WatsonX
+async function analyzeUserSemanticallyWithWatsonX(user: UserProfile): Promise<any> {
+  const prompt = `You are an AI semantic analyzer for volunteer matching. Analyze the following volunteer profile and return ONLY valid JSON.
 
-  for (let i = 0; i < opportunities.length; i++) {
-    const opp = opportunities[i];
-    const oppTitle: string = (opp.title || '').toLowerCase();
-    const oppDescription: string = (opp.description || '').toLowerCase();
-    const oppTheme: string = (opp.theme || '').toLowerCase();
-    const oppLocation: string = (opp.location || '').toLowerCase();
-    
-    let totalScore: number = 30; // Score base
-    const matchedSkills: string[] = [];
-    
-    // 1. MATCH DE SKILLS (peso maior)
-    let skillMatchCount: number = 0;
-    for (const skill of userSkills) {
-      if (oppTitle.includes(skill)) {
-        totalScore += 25;
-        skillMatchCount++;
-        matchedSkills.push(skill);
-      } else if (oppTheme.includes(skill)) {
-        totalScore += 15;
-        skillMatchCount++;
-        matchedSkills.push(skill);
-      } else if (oppDescription.includes(skill)) {
-        totalScore += 8;
-        skillMatchCount++;
-        matchedSkills.push(skill);
-      }
+VOLUNTEER PROFILE:
+- Name: ${user.name}
+- Skills: ${user.skills?.join(', ') || 'None provided'}
+- Self-description: ${user.description || 'None provided'}
+- Location: ${user.location || 'Not specified'}
+- Availability: ${user.availability || 'Not specified'}
+
+Based on semantic understanding of their skills and description, identify:
+
+1. PRIMARY_CATEGORY: The main category that best matches their profile (choose ONE: "Education", "Health", "Environment", "Social Services", "Technology", "Arts & Culture", "Sports", "Animals")
+
+2. SECONDARY_CATEGORIES: Other relevant categories (array of strings)
+
+3. KEY_SKILLS: Extract the most relevant skills from their profile (array of strings, max 8)
+
+4. INTERESTS: Infer what topics/areas they care about (array of strings, max 6)
+
+5. PERSONALITY_TRAITS: Infer personality traits from the description (array of strings, max 4)
+
+6. EXPERIENCE_LEVEL: "beginner", "intermediate", or "advanced"
+
+7. SEMANTIC_TAGS: Key semantic concepts extracted from their profile (array of strings, max 10)
+
+Return EXACTLY this JSON format (no other text):
+{
+  "primary_category": "string",
+  "secondary_categories": ["string"],
+  "key_skills": ["string"],
+  "interests": ["string"],
+  "personality_traits": ["string"],
+  "experience_level": "string",
+  "semantic_tags": ["string"]
+}`;
+
+  const response = await callWatsonX(prompt);
+  
+  try {
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
     }
+    return JSON.parse(response);
+  } catch (error) {
+    console.error('❌ Erro ao parsear resposta da WatsonX:', error);
+    throw new Error('Falha na análise semântica do perfil');
+  }
+}
+
+// Função para analisar compatibilidade com WatsonX
+async function analyzeOpportunitiesWithWatsonX(userAnalysis: any, opportunities: Opportunity[]): Promise<MatchResult[]> {
+  const results: MatchResult[] = [];
+  const batchSize = 3; // Processar 3 por vez para não sobrecarregar
+  
+  console.log(`🔍 Analisando ${opportunities.length} oportunidades com IBM WatsonX...`);
+  
+  for (let i = 0; i < opportunities.length; i += batchSize) {
+    const batch = opportunities.slice(i, i + batchSize);
     
-    // 2. Bônus por múltiplos matches
-    if (skillMatchCount >= 2) totalScore += 10;
-    if (skillMatchCount >= 3) totalScore += 15;
-    if (skillMatchCount >= 4) totalScore += 20;
-    
-    // 3. ANÁLISE DA DESCRIÇÃO DO USUÁRIO
-    if (userDescription.length > 20) {
-      const importantWords: string[] = userDescription.split(/\s+/).filter((w: string) => w.length > 4);
-      let descriptionMatches: number = 0;
-      
-      for (const word of importantWords.slice(0, 10)) {
-        if (oppDescription.includes(word) || oppTitle.includes(word)) {
-          descriptionMatches++;
-        }
+    const batchPromises = batch.map(async (opp, idx) => {
+      const prompt = `You are an AI matching expert. Analyze the semantic compatibility between a volunteer and an opportunity.
+
+VOLUNTEER SEMANTIC PROFILE:
+- Primary Category: ${userAnalysis.primary_category}
+- Secondary Categories: ${userAnalysis.secondary_categories?.join(', ')}
+- Key Skills: ${userAnalysis.key_skills?.join(', ')}
+- Interests: ${userAnalysis.interests?.join(', ')}
+- Semantic Tags: ${userAnalysis.semantic_tags?.join(', ')}
+- Experience Level: ${userAnalysis.experience_level}
+
+OPPORTUNITY:
+- Title: ${opp.title}
+- Theme: ${opp.theme}
+- Location: ${opp.location}
+- Description: ${opp.description?.substring(0, 500)}
+
+Based on SEMANTIC UNDERSTANDING, calculate:
+1. matchScore: Number from 0-100 (be realistic and strict)
+2. matchedSkills: Which of the volunteer's skills are relevant to this opportunity (max 4)
+3. reasoning: Brief explanation in Portuguese why this is a good or bad match (1-2 sentences)
+4. recommendation: Personalized recommendation in Portuguese for the volunteer (1 sentence)
+5. relevanceLevel: "high", "medium", or "low"
+
+Return EXACTLY this JSON format:
+{
+  "matchScore": 0,
+  "matchedSkills": [],
+  "reasoning": "",
+  "recommendation": "",
+  "relevanceLevel": ""
+}`;
+
+      try {
+        const response = await callWatsonX(prompt);
+        const jsonMatch = response.match(/\{[\s\S]*\}/);
+        const analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(response);
+        
+        console.log(`   ✅ Oportunidade ${i + idx + 1}/${opportunities.length} analisada - Score: ${analysis.matchScore}`);
+        
+        return {
+          id: opp.id,
+          title: opp.title,
+          organization: opp.organization,
+          location: opp.location,
+          description: opp.description?.substring(0, 300),
+          skills: [],
+          matchScore: Math.min(100, Math.max(0, analysis.matchScore || 50)),
+          matchedSkills: (analysis.matchedSkills || []).slice(0, 4),
+          missingSkills: [],
+          reasoning: analysis.reasoning || `Compatível com seu perfil em ${userAnalysis.primary_category}.`,
+          recommendation: analysis.recommendation || `Recomendamos conhecer esta oportunidade.`,
+          priority: analysis.relevanceLevel === 'high' ? 'high' : analysis.relevanceLevel === 'medium' ? 'medium' : 'low',
+          theme: opp.theme,
+          projectLink: opp.projectLink
+        } as MatchResult;
+      } catch (error) {
+        console.error(`❌ Erro na oportunidade ${i + idx + 1}:`, error);
+        // Fallback para não parar o processo
+        return {
+          id: opp.id,
+          title: opp.title,
+          organization: opp.organization,
+          location: opp.location,
+          description: opp.description?.substring(0, 300),
+          skills: [],
+          matchScore: 45,
+          matchedSkills: userAnalysis.key_skills?.slice(0, 2) || [],
+          missingSkills: [],
+          reasoning: `Análise baseada no seu perfil em ${userAnalysis.primary_category}.`,
+          recommendation: `Explore esta oportunidade para fazer a diferença.`,
+          priority: 'medium',
+          theme: opp.theme,
+          projectLink: opp.projectLink
+        } as MatchResult;
       }
-      
-      if (descriptionMatches > 0) {
-        totalScore += Math.min(15, descriptionMatches * 3);
-      }
-    }
-    
-    // 4. LOCALIZAÇÃO
-    if (userLocation.length > 0 && oppLocation.length > 0) {
-      const userCity: string = userLocation.split(',')[0].trim();
-      if (oppLocation.includes(userCity)) {
-        totalScore += 15;
-      } else if (oppLocation.includes('brasil')) {
-        totalScore += 8;
-      }
-    }
-    
-    // 5. TEMA (boost para temas relevantes)
-    const userText: string = `${userSkills.join(' ')} ${userDescription}`.toLowerCase();
-    const relevantThemes: string[] = ['educação', 'ensino', 'criança', 'saúde', 'ambiente', 'social', 'tecnologia'];
-    
-    for (const theme of relevantThemes) {
-      if (userText.includes(theme) && oppTheme.includes(theme)) {
-        totalScore += 10;
-      }
-    }
-    
-    // 6. Variação controlada baseada no ID (para diversidade)
-    let idHash: number = 0;
-    for (let j = 0; j < opp.id.length; j++) {
-      idHash += opp.id.charCodeAt(j);
-    }
-    const variation: number = (idHash % 21) - 10; // -10 a +10
-    totalScore += variation;
-    
-    // 7. Garantir limites e arredondar
-    let finalScore: number = Math.min(98, Math.max(15, totalScore));
-    finalScore = Math.floor(finalScore);
-    
-    // 8. Prioridade
-    let priority: 'high' | 'medium' | 'low' = 'medium';
-    if (finalScore >= 70) priority = 'high';
-    else if (finalScore >= 45) priority = 'medium';
-    else priority = 'low';
-    
-    // 9. Reasoning personalizado
-    let reasoning: string = '';
-    let recommendation: string = '';
-    
-    if (finalScore >= 80) {
-      if (matchedSkills.length >= 2) {
-        reasoning = `🏆 Excelente! Suas habilidades em ${matchedSkills.slice(0, 2).join(' e ')} são altamente relevantes para este projeto na área de ${opp.theme}.`;
-      } else {
-        reasoning = `🏆 Excelente compatibilidade! Seu perfil está muito alinhado com as necessidades deste projeto.`;
-      }
-      recommendation = `🎯 RECOMENDAÇÃO FORTE: Candidate-se agora! Esta oportunidade é perfeita para você.`;
-    } else if (finalScore >= 65) {
-      if (matchedSkills.length >= 1) {
-        reasoning = `👍 Ótima compatibilidade! Sua experiência em ${matchedSkills[0]} será muito útil para este projeto.`;
-      } else {
-        reasoning = `👍 Boa oportunidade! Seu perfil se alinha bem com o tema ${opp.theme}.`;
-      }
-      recommendation = `✨ RECOMENDAÇÃO POSITIVA: Vale muito a pena se candidatar.`;
-    } else if (finalScore >= 45) {
-      reasoning = `💡 Compatibilidade positiva! Você pode contribuir de forma significativa e desenvolver novas habilidades.`;
-      recommendation = `📋 RECOMENDAÇÃO: Boa oportunidade para aplicar seus conhecimentos.`;
-    } else {
-      reasoning = `🌱 Oportunidade interessante para aprender e expandir sua experiência em ${opp.theme}.`;
-      recommendation = `📚 RECOMENDAÇÃO: Ótima chance de desenvolvimento profissional.`;
-    }
-    
-    results.push({
-      id: opp.id,
-      title: opp.title,
-      organization: opp.organization,
-      location: opp.location,
-      description: opp.description?.substring(0, 300),
-      skills: [],
-      matchScore: finalScore,
-      matchedSkills: [...new Set(matchedSkills)].slice(0, 4),
-      missingSkills: [],
-      reasoning: reasoning,
-      recommendation: recommendation,
-      priority: priority,
-      theme: opp.theme,
-      projectLink: opp.projectLink
     });
+    
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
+    
+    // Delay entre lotes para não sobrecarregar a API
+    await new Promise(resolve => setTimeout(resolve, 500));
+    console.log(`   📊 Progresso: ${Math.min(i + batchSize, opportunities.length)}/${opportunities.length} oportunidades analisadas`);
   }
   
   return results;
+}
+
+// Chamar API da IBM WatsonX
+async function callWatsonX(prompt: string): Promise<string> {
+  const apiKey = process.env.IBM_API_KEY;
+  const projectId = process.env.IBM_PROJECT_ID;
+  const url = `${process.env.IBM_URL}/ml/v1/text/generation?version=2023-05-29`;
+  
+  // Primeiro, obter token de acesso
+  const tokenResponse = await fetch('https://iam.cloud.ibm.com/identity/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ibm:params:oauth:grant-type:apikey',
+      apikey: apiKey!
+    })
+  });
+  
+  if (!tokenResponse.ok) {
+    throw new Error(`Falha ao obter token IBM: ${tokenResponse.status}`);
+  }
+  
+  const { access_token } = await tokenResponse.json();
+  
+  // Chamar a API de geração
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${access_token}`
+    },
+    body: JSON.stringify({
+      input: prompt,
+      parameters: {
+        max_new_tokens: 500,
+        temperature: 0.3,
+        top_p: 0.9,
+        top_k: 50,
+        repetition_penalty: 1.1
+      },
+      model_id: 'meta-llama/llama-3-2-3b-instruct',
+      project_id: projectId
+    })
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`WatsonX API error: ${response.status} - ${errorText}`);
+  }
+  
+  const data = await response.json();
+  return data.results?.[0]?.generated_text || '';
 }
 
 // Buscar oportunidades com cache
@@ -335,8 +397,7 @@ async function fetchOpportunitiesWithCache(): Promise<Opportunity[]> {
     
     console.log('🌍 Buscando oportunidades da GlobalGiving...');
     
-    // Buscar múltiplas páginas para mais variedade
-    for (let page = 1; page <= 3; page++) {
+    for (let page = 1; page <= 5; page++) {
       const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}&page=${page}`;
       
       const response = await fetch(url, {
@@ -344,10 +405,7 @@ async function fetchOpportunitiesWithCache(): Promise<Opportunity[]> {
         cache: 'no-store'
       });
 
-      if (!response.ok) {
-        console.log(`⚠️ Página ${page}: erro ${response.status}`);
-        break;
-      }
+      if (!response.ok) break;
 
       const data = await response.json();
       const projects = data.projects?.project || [];
@@ -362,13 +420,7 @@ async function fetchOpportunitiesWithCache(): Promise<Opportunity[]> {
     
     console.log(`📡 GlobalGiving: ${allProjects.length} projetos carregados`);
 
-    // Embaralhar para variar os resultados
-    for (let i = allProjects.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [allProjects[i], allProjects[j]] = [allProjects[j], allProjects[i]];
-    }
-
-    cachedProjects = allProjects.slice(0, 100).map((project: any): Opportunity => ({
+    cachedProjects = allProjects.map((project: any): Opportunity => ({
       id: project.id,
       title: project.title || 'Projeto de Voluntariado',
       organization: project.organization?.name || 'GlobalGiving Partner',
