@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import styles from './assistant.module.css';
+import styles from './page.module.css';
 
 const CHAT_URL = "https://dl.watson-orchestrate.ibm.com/chat?agentId=ae187a51-172a-4288-b5fe-fefae23ab71f";
 
