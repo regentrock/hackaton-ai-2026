@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
     console.log('👤 Usuário:', user.name);
     console.log('🎯 Skills:', user.skills);
 
-    // 3. Buscar MAIS oportunidades
+    // 3. Buscar MAIS oportunidades (aumentado para 500 projetos brutos)
     let allOpportunities = await fetchOpportunitiesWithCache();
     
     if (allOpportunities.length === 0) {
@@ -95,11 +95,12 @@ export async function GET(request: NextRequest) {
 
     console.log(`📦 Total de ${allOpportunities.length} oportunidades encontradas`);
 
-    // 4. Analisar matches
+    // 4. Analisar matches - AUMENTADO: de 80 para 300 projetos analisados pela IA
     let allMatches: MatchResult[] = [];
     
     try {
-      allMatches = await analyzeMatchesWithWatsonX(user, allOpportunities.slice(0, 80));
+      // Analisar 300 projetos com WatsonX (aumentado de 80 para 300)
+      allMatches = await analyzeMatchesWithWatsonX(user, allOpportunities.slice(0, 300));
       console.log('✅ Análise concluída com IBM WatsonX');
     } catch (watsonxError) {
       console.error('⚠️ WatsonX falhou, usando algoritmo local:', watsonxError);
@@ -117,7 +118,11 @@ export async function GET(request: NextRequest) {
     console.log(`\n📊 RESULTADOS:`);
     console.log(`   📄 Página ${page} de ${totalPages}`);
     console.log(`   🎯 Mostrando ${paginatedMatches.length} de ${allMatches.length} matches`);
+    console.log(`   🔥 Alta compatibilidade (70-100%): ${allMatches.filter(m => m.matchScore >= 70).length}`);
+    console.log(`   📌 Média compatibilidade (50-69%): ${allMatches.filter(m => m.matchScore >= 50 && m.matchScore < 70).length}`);
+    console.log(`   🌱 Baixa compatibilidade (0-49%): ${allMatches.filter(m => m.matchScore < 50).length}`);
     console.log(`   🏆 Top score: ${allMatches[0]?.matchScore}%`);
+    console.log(`   📈 Score médio: ${Math.round(allMatches.reduce((acc, m) => acc + m.matchScore, 0) / allMatches.length)}%`);
 
     return NextResponse.json({
       success: true,
@@ -128,7 +133,14 @@ export async function GET(request: NextRequest) {
       hasMore: hasMore,
       limit: limit,
       userSkills: user.skills || [],
-      executionTimeMs: Date.now() - startTime
+      executionTimeMs: Date.now() - startTime,
+      usingAI: true,
+      stats: {
+        highMatches: allMatches.filter(m => m.matchScore >= 70).length,
+        mediumMatches: allMatches.filter(m => m.matchScore >= 50 && m.matchScore < 70).length,
+        lowMatches: allMatches.filter(m => m.matchScore < 50).length,
+        averageScore: Math.round(allMatches.reduce((acc, m) => acc + m.matchScore, 0) / allMatches.length)
+      }
     });
 
   } catch (error: any) {
@@ -204,7 +216,7 @@ async function callGranite(prompt: string): Promise<string> {
   return data.results?.[0]?.generated_text || '';
 }
 
-// Analisar matches com IBM WatsonX
+// Analisar matches com IBM WatsonX - AUMENTADO para processar lotes maiores
 async function analyzeMatchesWithWatsonX(user: any, opportunities: any[]): Promise<MatchResult[]> {
   const results: MatchResult[] = [];
   const userSkills = user.skills?.join(', ') || 'Nenhuma habilidade listada';
@@ -212,9 +224,12 @@ async function analyzeMatchesWithWatsonX(user: any, opportunities: any[]): Promi
   
   console.log(`🔍 Analisando ${opportunities.length} oportunidades com IBM Granite...`);
   
-  const batchSize = 5;
+  // AUMENTADO: batch size de 5 para 8 (processa mais em paralelo)
+  const batchSize = 8;
   for (let i = 0; i < opportunities.length; i += batchSize) {
     const batch = opportunities.slice(i, i + batchSize);
+    console.log(`   📦 Processando lote ${Math.floor(i/batchSize)+1}/${Math.ceil(opportunities.length/batchSize)} (${batch.length} oportunidades)`);
+    
     const batchPromises = batch.map(async (opp, idx) => {
       const prompt = `[INST] You are a volunteer matching expert. Analyze the match.
 
@@ -266,9 +281,9 @@ Return JSON only:
     
     const batchResults = await Promise.all(batchPromises);
     results.push(...batchResults);
-    console.log(`   📦 Lote ${Math.floor(i/batchSize)+1}/${Math.ceil(opportunities.length/batchSize)} concluído`);
     
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Delay reduzido para 800ms (antes 1000ms)
+    await new Promise(resolve => setTimeout(resolve, 800));
   }
   
   return results;
@@ -313,17 +328,17 @@ function calculateSingleMatch(user: any, opp: any, index: number): MatchResult {
   let recommendation = '';
   
   if (finalScore >= 75) {
-    reasoning = `🏆 Excelente compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são muito relevantes para este projeto.`;
-    recommendation = `🎯 RECOMENDAÇÃO FORTE: Candidate-se imediatamente!`;
+    reasoning = `Excelente compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são muito relevantes para este projeto.`;
+    recommendation = `Recomendação forte: Candidate-se imediatamente!`;
   } else if (finalScore >= 65) {
-    reasoning = `👍 Ótima compatibilidade! Sua experiência em ${matchedSkills.slice(0, 2).join(', ')} será muito útil.`;
-    recommendation = `👍 RECOMENDAÇÃO: Considere se candidatar.`;
+    reasoning = `Ótima compatibilidade! Sua experiência em ${matchedSkills.slice(0, 2).join(', ')} será muito útil.`;
+    recommendation = `Recomendação: Considere se candidatar.`;
   } else if (finalScore >= 50) {
-    reasoning = `💡 Compatibilidade positiva! Você pode contribuir significativamente.`;
-    recommendation = `💡 RECOMENDAÇÃO: Vale a pena explorar esta oportunidade.`;
+    reasoning = `Compatibilidade positiva! Você pode contribuir significativamente.`;
+    recommendation = `Recomendação: Vale a pena explorar esta oportunidade.`;
   } else {
-    reasoning = `📌 Oportunidade interessante para desenvolver novas habilidades.`;
-    recommendation = `📚 RECOMENDAÇÃO: Ótima oportunidade para aprendizado.`;
+    reasoning = `Oportunidade interessante para desenvolver novas habilidades.`;
+    recommendation = `Recomendação: Ótima oportunidade para aprendizado.`;
   }
   
   return {
@@ -344,12 +359,12 @@ function calculateSingleMatch(user: any, opp: any, index: number): MatchResult {
   };
 }
 
-// Buscar oportunidades com cache
+// Buscar oportunidades com cache - AUMENTADO: 500 projetos em cache
 async function fetchOpportunitiesWithCache(): Promise<any[]> {
   const now = Date.now();
   
   if (cachedProjects.length > 0 && (now - cacheTimestamp) < CACHE_DURATION) {
-    console.log('📦 Usando cache de projetos');
+    console.log('📦 Usando cache de projetos (${cachedProjects.length} projetos)');
     return cachedProjects;
   }
   
@@ -365,7 +380,9 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
     
     console.log('🌍 Buscando oportunidades da GlobalGiving...');
     
-    for (let page = 1; page <= 3; page++) {
+    // AUMENTADO: de 3 para 10 páginas (até 500 projetos)
+    const MAX_PAGES = 10;
+    for (let page = 1; page <= MAX_PAGES; page++) {
       const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}&page=${page}`;
       
       const response = await fetch(url, {
@@ -373,22 +390,30 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
         cache: 'no-store'
       });
 
-      if (!response.ok) break;
+      if (!response.ok) {
+        console.log(`⚠️ Página ${page}: erro ${response.status}, parando busca`);
+        break;
+      }
 
       const data = await response.json();
       const projects = data.projects?.project || [];
       
-      if (projects.length === 0) break;
+      if (projects.length === 0) {
+        console.log(`📄 Página ${page}: nenhum projeto, fim da busca`);
+        break;
+      }
       
       allProjects.push(...projects);
       console.log(`📄 Página ${page}: +${projects.length} projetos (total: ${allProjects.length})`);
       
-      await new Promise(resolve => setTimeout(resolve, 200));
+      // Pequeno delay entre páginas
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
     
     console.log(`📡 GlobalGiving: ${allProjects.length} projetos carregados`);
 
-    cachedProjects = allProjects.slice(0, 150).map((project: any) => ({
+    // AUMENTADO: cache de 150 para 500 projetos
+    cachedProjects = allProjects.slice(0, 500).map((project: any) => ({
       id: project.id,
       title: project.title || 'Projeto de Voluntariado',
       organization: project.organization?.name || 'GlobalGiving Partner',
@@ -399,6 +424,8 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
     }));
     
     cacheTimestamp = now;
+    
+    console.log(`💾 Cache atualizado com ${cachedProjects.length} projetos`);
     
     return cachedProjects;
     
