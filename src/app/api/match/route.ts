@@ -17,14 +17,17 @@ interface MatchResult {
   theme?: string;
 }
 
+// Cache para projetos (1 hora)
+let cachedProjects: any[] = [];
+let cacheTimestamp = 0;
+const CACHE_DURATION = 60 * 60 * 1000;
+
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
   console.log('\n🚀 ========== MATCH API INICIADA ==========');
   
   try {
-    // =========================
-    // 1. AUTENTICAÇÃO
-    // =========================
+    // 1. Autenticação
     let token = request.cookies.get('auth_token')?.value;
     
     if (!token) {
@@ -43,9 +46,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    // =========================
-    // 2. BUSCAR PERFIL DO USUÁRIO
-    // =========================
+    // 2. Buscar perfil do usuário
     const { prisma } = await import('@/src/lib/prisma');
     
     const user = await prisma.volunteer.findUnique({
@@ -70,10 +71,8 @@ export async function GET(request: NextRequest) {
     console.log('🎯 Skills:', user.skills);
     console.log('📍 Localização:', user.location);
 
-    // =========================
-    // 3. BUSCAR OPORTUNIDADES DA GLOBALGIVING
-    // =========================
-    const opportunities = await fetchOpportunitiesFromGlobalGiving(user);
+    // 3. Buscar oportunidades (com cache)
+    const opportunities = await fetchOpportunitiesWithCache();
     
     if (opportunities.length === 0) {
       return NextResponse.json({
@@ -85,15 +84,11 @@ export async function GET(request: NextRequest) {
 
     console.log(`📦 ${opportunities.length} oportunidades encontradas`);
 
-    // =========================
-    // 4. ANALISAR E CALCULAR MATCHES
-    // =========================
-    const matches = analyzeMatches(user, opportunities);
+    // 4. Calcular matches USANDO WATSONX
+    const matches = await calculateMatchesWithAI(user, opportunities);
 
-    // =========================
-    // 5. ORDENAR E RETORNAR
-    // =========================
-    matches.sort((a: MatchResult, b: MatchResult) => b.matchScore - a.matchScore);
+    // 5. Ordenar e retornar
+    matches.sort((a, b) => b.matchScore - a.matchScore);
     
     const executionTime = Date.now() - startTime;
     console.log(`✨ API finalizada em ${executionTime}ms`);
@@ -103,9 +98,9 @@ export async function GET(request: NextRequest) {
       success: true,
       matches: matches.slice(0, 15),
       total: matches.length,
-      analyzingMethod: 'watsonx-ai-enhanced',
       userSkills: user.skills || [],
-      executionTimeMs: executionTime
+      executionTimeMs: executionTime,
+      usingAI: true
     });
 
   } catch (error: any) {
@@ -117,7 +112,14 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function fetchOpportunitiesFromGlobalGiving(user: any): Promise<any[]> {
+async function fetchOpportunitiesWithCache(): Promise<any[]> {
+  const now = Date.now();
+  
+  if (cachedProjects.length > 0 && (now - cacheTimestamp) < CACHE_DURATION) {
+    console.log('📦 Usando cache de projetos');
+    return cachedProjects;
+  }
+  
   const apiKey = process.env.GLOBAL_GIVING_API_KEY;
   
   if (!apiKey) {
@@ -143,19 +145,19 @@ async function fetchOpportunitiesFromGlobalGiving(user: any): Promise<any[]> {
     
     console.log(`📡 GlobalGiving: ${projects.length} projetos brutos`);
 
-    return projects.map((project: any) => ({
+    cachedProjects = projects.map((project: any) => ({
       id: project.id,
       title: project.title || 'Projeto de Voluntariado',
       organization: project.organization?.name || 'GlobalGiving Partner',
       location: `${project.location?.city || 'Brasil'}, ${project.location?.country || 'BR'}`,
       description: project.summary || project.description || '',
-      theme: extractThemeFromTitle(project.title),
-      skills: extractSkillsFromProject(project),
-      url: project.projectLink,
-      imageUrl: project.imageLink,
-      fundingGoal: project.goal,
-      fundingRaised: project.funding
+      theme: project.themeName || 'Voluntariado',
+      url: project.projectLink
     }));
+    
+    cacheTimestamp = now;
+    
+    return cachedProjects;
     
   } catch (error) {
     console.error('❌ Erro ao buscar oportunidades:', error);
@@ -163,176 +165,188 @@ async function fetchOpportunitiesFromGlobalGiving(user: any): Promise<any[]> {
   }
 }
 
-function extractThemeFromTitle(title: string): string {
-  const titleLower = title.toLowerCase();
+async function calculateMatchesWithAI(user: any, opportunities: any[]): Promise<MatchResult[]> {
+  console.log('\n🤖 ANALISANDO MATCHES COM WATSONX...');
   
-  if (titleLower.includes('educa') || titleLower.includes('ensin') || titleLower.includes('escola')) {
-    return 'Educação';
-  }
-  if (titleLower.includes('saude') || titleLower.includes('medic') || titleLower.includes('hospital')) {
-    return 'Saúde';
-  }
-  if (titleLower.includes('ambient') || titleLower.includes('ecolog') || titleLower.includes('natureza')) {
-    return 'Meio Ambiente';
-  }
-  if (titleLower.includes('social') || titleLower.includes('comunidade')) {
-    return 'Ação Social';
-  }
-  if (titleLower.includes('cultura') || titleLower.includes('arte') || titleLower.includes('musica')) {
-    return 'Cultura e Arte';
-  }
-  if (titleLower.includes('tecnologia') || titleLower.includes('tech') || titleLower.includes('digital')) {
-    return 'Tecnologia';
-  }
-  
-  return 'Desenvolvimento Social';
-}
-
-function extractSkillsFromProject(project: any): string[] {
-  const skills: string[] = [];
-  const text = `${project.title || ''} ${project.summary || ''} ${project.description || ''} ${project.themeName || ''}`.toLowerCase();
-  
-  const skillMappings = [
-    // Educação
-    { keywords: ['ensin', 'educa', 'profess', 'escola', 'criança', 'alfabetizacao', 'pedagogia', 'aula', 'formacao', 'didatica'], skill: 'Ensino' },
-    { keywords: ['ingles', 'english', 'idioma', 'lingua'], skill: 'Idiomas' },
-    { keywords: ['matematica', 'math', 'numeros'], skill: 'Matemática' },
-    // Tecnologia
-    { keywords: ['programa', 'codigo', 'software', 'web', 'desenvolvimento', 'tecnologia', 'tech', 'digital', 'computador', 'sistema'], skill: 'Programação' },
-    { keywords: ['dados', 'data', 'analise', 'analytics'], skill: 'Análise de Dados' },
-    { keywords: ['design', 'ui', 'ux', 'figma'], skill: 'Design' },
-    // Saúde
-    { keywords: ['saude', 'medicina', 'enfermagem', 'cuidado', 'bem-estar', 'hospital', 'clinica', 'paciente'], skill: 'Saúde' },
-    { keywords: ['psicologia', 'mental', 'bem estar'], skill: 'Psicologia' },
-    // Meio Ambiente
-    { keywords: ['ambiente', 'ecologia', 'sustentabilidade', 'reciclagem', 'natureza', 'floresta', 'agua', 'clima'], skill: 'Sustentabilidade' },
-    // Social
-    { keywords: ['social', 'comunidade', 'assistencia', 'voluntariado', 'familia', 'morador', 'local'], skill: 'Trabalho Social' },
-    { keywords: ['direito', 'advogado', 'juridico', 'legal'], skill: 'Direito' },
-    { keywords: ['comunicacao', 'marketing', 'redes sociais', 'publicidade'], skill: 'Comunicação' },
-    // Cultura
-    { keywords: ['cultura', 'arte', 'teatro', 'musica', 'danca', 'oficina', 'artesanato'], skill: 'Artes' },
-    // Esportes
-    { keywords: ['esporte', 'futebol', 'atividade fisica', 'recreacao', 'lazer'], skill: 'Esportes' },
-    // Administração
-    { keywords: ['administracao', 'gestao', 'organizacao', 'planejamento', 'coordenação'], skill: 'Gestão' },
-    { keywords: ['financas', 'contabilidade', 'orcamento'], skill: 'Finanças' },
-    { keywords: ['rh', 'recursos humanos', 'pessoas'], skill: 'RH' },
-  ];
-  
-  for (const mapping of skillMappings) {
-    if (mapping.keywords.some((kw: string) => text.includes(kw))) {
-      skills.push(mapping.skill);
-    }
-  }
-  
-  if (skills.length === 0) {
-    skills.push('Voluntariado Geral');
-  }
-  
-  return [...new Set(skills)].slice(0, 5);
-}
-
-function analyzeMatches(user: any, opportunities: any[]): MatchResult[] {
-  const userSkills = user.skills?.map((s: string) => s.toLowerCase()) || [];
-  const userLocation = user.location?.toLowerCase() || '';
   const results: MatchResult[] = [];
-
-  for (const opp of opportunities) {
-    const oppSkills = opp.skills?.map((s: string) => s.toLowerCase()) || [];
-    const oppLocation = opp.location?.toLowerCase() || '';
+  const batchSize = 5;
+  
+  for (let i = 0; i < opportunities.length; i += batchSize) {
+    const batch = opportunities.slice(i, i + batchSize);
+    const batchNum = Math.floor(i / batchSize) + 1;
+    const totalBatches = Math.ceil(opportunities.length / batchSize);
     
-    // 1. Score de habilidades (peso 60%)
-    let skillMatches = 0;
-    const matchedSkills: string[] = [];
+    console.log(`📦 Processando lote ${batchNum}/${totalBatches}`);
     
-    for (const userSkill of userSkills) {
-      for (const oppSkill of oppSkills) {
-        if (userSkill === oppSkill || 
-            oppSkill.includes(userSkill) || 
-            userSkill.includes(oppSkill)) {
-          skillMatches++;
-          matchedSkills.push(oppSkill);
-          break;
-        }
-      }
-    }
-    
-    const skillScore = (skillMatches / Math.max(oppSkills.length, 1)) * 60;
-    
-    // 2. Score de localização (peso 20%)
-    let locationScore = 0;
-    if (userLocation && oppLocation) {
-      if (oppLocation.includes('remoto') || oppLocation.includes('online')) {
-        locationScore = 20;
-      } else if (oppLocation.includes(userLocation.split(',')[0])) {
-        locationScore = 20;
-      } else if (oppLocation.includes(userLocation.split(',')[1]?.trim() || '')) {
-        locationScore = 15;
-      } else if (userLocation && oppLocation.includes('brasil')) {
-        locationScore = 10;
-      }
-    } else {
-      locationScore = 10;
-    }
-    
-    // 3. Score de tema/área (peso 20%)
-    let themeScore = 0;
-    const theme = opp.theme?.toLowerCase() || '';
-    
-    for (const userSkill of userSkills) {
-      if (theme.includes(userSkill)) {
-        themeScore += 10;
-      }
-    }
-    themeScore = Math.min(20, themeScore);
-    
-    // 4. Score total
-    let totalScore = Math.floor(skillScore + locationScore + themeScore);
-    totalScore = Math.min(100, Math.max(10, totalScore));
-    
-    // Determinar prioridade
-    let priority: 'high' | 'medium' | 'low' = 'medium';
-    if (totalScore >= 75) priority = 'high';
-    else if (totalScore >= 45) priority = 'medium';
-    else priority = 'low';
-    
-    // Gerar reasoning e recommendation
-    let reasoning = '';
-    let recommendation = '';
-    
-    if (totalScore >= 75) {
-      reasoning = `Excelente compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são muito relevantes para este projeto. Você tem um perfil muito alinhado com as necessidades da organização.`;
-      recommendation = `🎯 RECOMENDAÇÃO FORTE: Candidate-se imediatamente! Suas habilidades são exatamente o que este projeto procura.`;
-    } else if (totalScore >= 50) {
-      if (matchedSkills.length > 0) {
-        reasoning = `Boa compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são relevantes para o projeto "${opp.title}". Você pode contribuir significativamente.`;
-        recommendation = `👍 RECOMENDAÇÃO: Considere se candidatar. Suas habilidades são valiosas para esta oportunidade.`;
-      } else {
-        reasoning = `Compatibilidade moderada. Este projeto pode se beneficiar da sua experiência, embora não haja um alinhamento direto de habilidades.`;
-        recommendation = `💡 RECOMENDAÇÃO: Vale a pena explorar esta oportunidade. Você pode contribuir de forma significativa.`;
-      }
-    } else {
-      reasoning = `Compatibilidade em desenvolvimento. Este projeto pode ser uma oportunidade para você desenvolver novas habilidades e expandir sua experiência em voluntariado.`;
-      recommendation = `📚 RECOMENDAÇÃO: Esta é uma ótima oportunidade para aprendizado e desenvolvimento de novas habilidades.`;
-    }
-    
-    results.push({
-      id: opp.id,
-      title: opp.title,
-      organization: opp.organization,
-      location: opp.location,
-      description: opp.description,
-      skills: opp.skills,
-      theme: opp.theme,
-      matchScore: totalScore,
-      matchedSkills: matchedSkills.slice(0, 4),
-      missingSkills: oppSkills.filter((s: string) => !matchedSkills.includes(s)).slice(0, 3),
-      reasoning,
-      recommendation,
-      priority
+    const batchPromises = batch.map(async (opportunity: any) => {
+      return await analyzeMatchWithWatsonX(user, opportunity);
     });
+    
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
+    
+    if (i + batchSize < opportunities.length) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
   }
   
   return results;
+}
+
+async function analyzeMatchWithWatsonX(user: any, opportunity: any): Promise<MatchResult> {
+  try {
+    if (!process.env.IBM_API_KEY || !process.env.IBM_URL || !process.env.IBM_PROJECT_ID) {
+      console.log('⚠️ WatsonX não configurado, usando fallback');
+      return createBasicMatch(user, opportunity, 50);
+    }
+    
+    const tokenResponse = await fetch('https://iam.cloud.ibm.com/identity/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=${process.env.IBM_API_KEY}`
+    });
+    
+    if (!tokenResponse.ok) {
+      console.warn('Erro ao obter token IAM');
+      return createBasicMatch(user, opportunity, 50);
+    }
+    
+    const tokenData = await tokenResponse.json();
+    const accessToken = tokenData.access_token;
+    
+    const prompt = `You are an AI that matches volunteers to opportunities. Analyze the match between a volunteer and an opportunity.
+
+=== VOLUNTEER ===
+Skills: ${user.skills?.join(', ') || 'None listed'}
+Location: ${user.location || 'Not specified'}
+
+=== OPPORTUNITY ===
+Title: ${opportunity.title}
+Organization: ${opportunity.organization}
+Theme: ${opportunity.theme || 'Social Impact'}
+Description: ${opportunity.description?.substring(0, 600) || 'No description'}
+
+=== TASK ===
+Based STRICTLY on the volunteer's skills, determine how well they match this opportunity.
+
+Calculate a match score from 0 to 100.
+
+Return ONLY this JSON:
+{
+  "score": number,
+  "matchedSkills": ["skill1", "skill2"],
+  "reasoning": "em português",
+  "recommendation": "em português"
+}`;
+
+    const watsonResponse = await fetch(`${process.env.IBM_URL}/ml/v1/text/generation?version=2023-05-29`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        input: prompt,
+        model_id: "ibm/granite-3-8b-instruct",
+        project_id: process.env.IBM_PROJECT_ID,
+        parameters: {
+          decoding_method: "greedy",
+          max_new_tokens: 250,
+          temperature: 0.2,
+        },
+      }),
+    });
+
+    if (!watsonResponse.ok) {
+      console.warn(`WatsonX error: ${watsonResponse.status}`);
+      return createBasicMatch(user, opportunity, 50);
+    }
+
+    const data = await watsonResponse.json();
+    const aiText = data.results[0].generated_text;
+    
+    const cleanText = aiText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+    
+    if (!jsonMatch) {
+      return createBasicMatch(user, opportunity, 50);
+    }
+    
+    const parsed = JSON.parse(jsonMatch[0]);
+    
+    let score = Math.min(95, Math.max(15, parsed.score || 50));
+    
+    // Bônus de localização
+    if (user.location && opportunity.location) {
+      const userCity = user.location.split(',')[0].trim().toLowerCase();
+      const oppLocation = opportunity.location.toLowerCase();
+      if (oppLocation.includes(userCity)) {
+        score = Math.min(95, score + 10);
+      }
+    }
+    
+    // Bônus para oportunidades remotas
+    if (opportunity.location.toLowerCase().includes('remoto')) {
+      score = Math.min(95, score + 5);
+    }
+    
+    const priority: 'high' | 'medium' | 'low' = score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low';
+    
+    return {
+      id: opportunity.id,
+      title: opportunity.title,
+      organization: opportunity.organization,
+      location: opportunity.location,
+      description: opportunity.description?.substring(0, 200),
+      skills: [],
+      matchScore: score,
+      matchedSkills: (parsed.matchedSkills || []).slice(0, 4),
+      missingSkills: [],
+      reasoning: parsed.reasoning || `Match baseado no seu perfil.`,
+      recommendation: parsed.recommendation || `Considere esta oportunidade.`,
+      priority,
+      theme: opportunity.theme
+    };
+    
+  } catch (error) {
+    console.error(`Erro no WatsonX:`, error);
+    return createBasicMatch(user, opportunity, 50);
+  }
+}
+
+function createBasicMatch(user: any, opportunity: any, baseScore: number): MatchResult {
+  let score = baseScore;
+  
+  if (user.skills && user.skills.length > 0) {
+    const text = `${opportunity.title} ${opportunity.description} ${opportunity.theme}`.toLowerCase();
+    let matches = 0;
+    
+    for (const skill of user.skills) {
+      if (text.includes(skill.toLowerCase())) {
+        matches++;
+      }
+    }
+    
+    if (matches > 0) {
+      score = Math.min(80, baseScore + (matches * 10));
+    }
+  }
+  
+  const priority: 'high' | 'medium' | 'low' = score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low';
+  
+  return {
+    id: opportunity.id,
+    title: opportunity.title,
+    organization: opportunity.organization,
+    location: opportunity.location,
+    description: opportunity.description?.substring(0, 200),
+    skills: [],
+    matchScore: score,
+    matchedSkills: [],
+    missingSkills: [],
+    reasoning: `Oportunidade na área de ${opportunity.theme || 'voluntariado'}.`,
+    recommendation: score >= 70 ? 'Excelente oportunidade para você!' : 'Considere esta oportunidade.',
+    priority,
+    theme: opportunity.theme
+  };
 }
