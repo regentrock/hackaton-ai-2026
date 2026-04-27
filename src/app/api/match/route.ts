@@ -308,8 +308,8 @@ Return ONLY valid JSON:
           matchScore: Math.floor(score),
           matchedSkills: (analysis.matchedSkills || []).slice(0, 4),
           missingSkills: [],
-          reasoning: analysis.reasoning || `🎯 Excelente oportunidade na área de ${opp.theme || 'voluntariado'}! Suas habilidades são muito relevantes.`,
-          recommendation: analysis.recommendation || `👍 Esta oportunidade está muito alinhada com seu perfil. Candidate-se!`,
+          reasoning: analysis.reasoning || `Excelente oportunidade na área de ${opp.theme || 'voluntariado'}! Suas habilidades são muito relevantes.`,
+          recommendation: analysis.recommendation || `Esta oportunidade está muito alinhada com seu perfil. Candidate-se!`,
           priority: priority,
           theme: opp.theme,
           projectLink: opp.projectLink
@@ -370,17 +370,17 @@ function calculateSingleMatch(user: any, opp: any, index: number, generous: bool
   let recommendation = '';
   
   if (finalScore >= 85) {
-    reasoning = `🏆 Excelente compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são altamente relevantes para este projeto. Você tem o perfil ideal!`;
-    recommendation = `🎯 RECOMENDAÇÃO FORTE: Candidate-se imediatamente! Esta oportunidade combina perfeitamente com seu perfil.`;
+    reasoning = `Excelente compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são altamente relevantes para este projeto. Você tem o perfil ideal!`;
+    recommendation = `Recomendação forte: Candidate-se imediatamente! Esta oportunidade combina perfeitamente com seu perfil.`;
   } else if (finalScore >= 75) {
-    reasoning = `👍 Ótima compatibilidade! Sua experiência em ${matchedSkills.slice(0, 2).join(', ')} será muito útil para este projeto. Você pode contribuir significativamente.`;
-    recommendation = `👍 RECOMENDAÇÃO: Considere se candidatar. Suas habilidades são valiosas para esta oportunidade.`;
+    reasoning = `Ótima compatibilidade! Sua experiência em ${matchedSkills.slice(0, 2).join(', ')} será muito útil para este projeto. Você pode contribuir significativamente.`;
+    recommendation = `Recomendação: Considere se candidatar. Suas habilidades são valiosas para esta oportunidade.`;
   } else if (finalScore >= 65) {
-    reasoning = `💡 Compatibilidade positiva! Este projeto pode se beneficiar da sua experiência. Você tem potencial para fazer a diferença.`;
-    recommendation = `💡 RECOMENDAÇÃO: Vale a pena explorar esta oportunidade. Pode ser um ótimo começo!`;
+    reasoning = `Compatibilidade positiva! Este projeto pode se beneficiar da sua experiência. Você tem potencial para fazer a diferença.`;
+    recommendation = `Recomendação: Vale a pena explorar esta oportunidade. Pode ser um ótimo começo!`;
   } else {
-    reasoning = `📌 Oportunidade interessante para desenvolver novas habilidades. Mesmo sem experiência direta, você pode contribuir e aprender muito.`;
-    recommendation = `📚 RECOMENDAÇÃO: Excelente oportunidade para crescimento pessoal e profissional. Candidate-se!`;
+    reasoning = `Oportunidade interessante para desenvolver novas habilidades. Mesmo sem experiência direta, você pode contribuir e aprender muito.`;
+    recommendation = `Recomendação: Excelente oportunidade para crescimento pessoal e profissional. Candidate-se!`;
   }
   
   return {

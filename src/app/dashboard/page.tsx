@@ -4,6 +4,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import styles from './page.module.css';
+import FloatingChatButton from '@/src/components/OrchestrateChat/FloatingChatButton';
 import SavedOpportunities from '@/src/components/SavedOpportunities/SavedOpportunities';
 
 export default function DashboardPage() {
@@ -340,6 +341,7 @@ export default function DashboardPage() {
           <SavedOpportunities/>
         </div>
       </div>
+      <FloatingChatButton/>
     </>
   );
 }

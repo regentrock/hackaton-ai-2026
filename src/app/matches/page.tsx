@@ -6,6 +6,7 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
+import FloatingChatButton from '@/src/components/OrchestrateChat/FloatingChatButton';
 
 interface Match {
   id: string;
@@ -534,6 +535,7 @@ export default function MatchesPage() {
           </div>
         )}
       </div>
+      <FloatingChatButton/>
     </div>
   );
 }
