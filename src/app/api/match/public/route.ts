@@ -1,71 +1,32 @@
-// app/api/match/public/route.ts - Versão final com filtro bilíngue
+// app/api/match/public/route.ts - VERSÃO PURA (APENAS DADOS)
 import { NextRequest, NextResponse } from 'next/server';
 
+// Cache simples para não sobrecarregar a GlobalGiving
 let cachedData: any = null;
 let cacheTime = 0;
 
-// Mapeamento de áreas para português e inglês
-const areaMappings: Record<string, string[]> = {
-  'educação': ['educação', 'education', 'ensino', 'teaching', 'escola', 'school'],
-  'saúde': ['saúde', 'health', 'hospital', 'medical', 'bem-estar'],
-  'meio ambiente': ['meio ambiente', 'environment', 'ecologia', 'ecology', 'sustentabilidade', 'sustainability'],
-  'tecnologia': ['tecnologia', 'technology', 'tech', 'programação', 'programming'],
-  'social': ['social', 'community', 'comunidade', 'assistência', 'assistance']
-};
-
 export async function GET(request: NextRequest) {
-  const url = new URL(request.url);
-  const area = url.searchParams.get('area') || '';
-  
-  console.log(`[API] Buscando oportunidades para: "${area}"`);
+  console.log('[API] Buscando oportunidades da GlobalGiving');
   
   try {
-    let opportunities = await fetchFromGlobalGiving();
+    // Buscar TODAS as oportunidades (sem filtro)
+    let opportunities = await fetchAllOpportunities();
     
     if (!opportunities || opportunities.length === 0) {
       return NextResponse.json({
         success: true,
         opportunities: [],
-        total: 0,
-        area: area
+        total: 0
       });
     }
     
-    console.log(`[API] Total de oportunidades: ${opportunities.length}`);
+    console.log(`[API] Retornando ${opportunities.length} oportunidades (sem filtro)`);
     
-    // Filtrar por área (usando mapeamento bilíngue)
-    let filtered = opportunities;
-    if (area && area.trim() !== '') {
-      const areaLower = area.toLowerCase();
-      const keywords = areaMappings[areaLower] || [areaLower];
-      
-      filtered = opportunities.filter(opp => {
-        const theme = (opp.theme || '').toLowerCase();
-        const title = (opp.title || '').toLowerCase();
-        return keywords.some(keyword => 
-          theme.includes(keyword) || title.includes(keyword)
-        );
-      });
-      
-      console.log(`[API] Filtrados ${filtered.length} de ${opportunities.length} para "${area}" usando keywords:`, keywords);
-    }
-    
-    const results = filtered.slice(0, 10).map(opp => ({
-      title: opp.title,
-      organization: opp.organization,
-      location: opp.location,
-      matchScore: opp.matchScore || 75,
-      reasoning: opp.reasoning || `Excelente oportunidade na área de ${opp.theme}`,
-      matchedSkills: ['Comunicação', 'Trabalho em equipe', 'Comprometimento'],
-      theme: opp.theme,
-      projectLink: opp.projectLink
-    }));
-    
+    // Retornar TUDO - o Orchestrate/IA vai filtrar semanticamente
     return NextResponse.json({
       success: true,
-      opportunities: results,
-      total: results.length,
-      area: area,
+      opportunities: opportunities,
+      total: opportunities.length,
       source: 'globalgiving'
     });
     
@@ -80,7 +41,8 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function fetchFromGlobalGiving(): Promise<any[]> {
+async function fetchAllOpportunities(): Promise<any[]> {
+  // Verificar cache
   const now = Date.now();
   if (cachedData && (now - cacheTime) < 5 * 60 * 1000) {
     console.log('[Cache] Usando dados em cache');
@@ -95,36 +57,44 @@ async function fetchFromGlobalGiving(): Promise<any[]> {
   
   try {
     console.log('[GlobalGiving] Buscando projetos...');
-    const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}&page=1&per_page=20`;
-    const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
     
-    if (!response.ok) {
-      console.error(`[GlobalGiving] HTTP ${response.status}`);
-      return [];
+    // Buscar TODOS os projetos (sem filtro de área)
+    const allProjects: any[] = [];
+    
+    for (let page = 1; page <= 3; page++) {
+      const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}&page=${page}&per_page=20`;
+      
+      const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      
+      if (!response.ok) break;
+      
+      const data = await response.json();
+      const projects = data?.projects?.project || [];
+      
+      if (projects.length === 0) break;
+      
+      allProjects.push(...projects);
+      console.log(`[GlobalGiving] Página ${page}: +${projects.length} projetos`);
     }
     
-    const data = await response.json();
-    const projects = data?.projects?.project;
+    console.log(`[GlobalGiving] Total: ${allProjects.length} projetos encontrados`);
     
-    if (!projects || !Array.isArray(projects)) {
-      console.error('[GlobalGiving] Estrutura inesperada');
-      return [];
-    }
-    
-    console.log(`[GlobalGiving] ${projects.length} projetos encontrados`);
-    
-    const mapped = projects.map((p: any) => ({
+    // Mapear para formato limpo (sem filtro)
+    const mapped = allProjects.map((p: any) => ({
       id: p.id,
       title: p.title || 'Projeto de Voluntariado',
       organization: p.organization?.name || 'Organização Parceira',
       location: p.location?.city ? `${p.location.city}, ${p.location.country || 'BR'}` : 'Brasil',
-      description: (p.summary || p.description || '').substring(0, 300),
+      description: (p.summary || p.description || '').substring(0, 500),
       theme: p.themeName || 'Voluntariado',
       projectLink: p.projectLink || '#',
-      matchScore: 75,
-      reasoning: `Oportunidade em ${p.themeName || 'voluntariado'} - excelente para seu perfil!`
+      // Campo original para a IA analisar
+      raw_title: p.title,
+      raw_theme: p.themeName,
+      raw_description: (p.summary || p.description || '').substring(0, 300)
     }));
     
+    // Armazenar em cache
     cachedData = mapped;
     cacheTime = now;
     
