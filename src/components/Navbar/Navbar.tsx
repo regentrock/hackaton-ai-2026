@@ -1,3 +1,4 @@
+// components/Navbar/Navbar.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -5,10 +6,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/src/contexts/AuthContext';
+import { openChat } from '@/src/lib/chatUtils';
 import styles from './Navbar.module.css';
-
-const AGENT_ID = "ae187a51-172a-4288-b5fe-fefae23ab71f";
-const CHAT_URL = `https://dl.watson-orchestrate.ibm.com/chat?agentId=${AGENT_ID}`;
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -39,16 +38,17 @@ export default function Navbar() {
     setIsMenuOpen(false);
   };
 
-  const openAssistant = (e: React.MouseEvent) => {
+  const handleOpenAssistant = (e: React.MouseEvent) => {
     e.preventDefault();
-    window.open(CHAT_URL, '_blank', 'noopener,noreferrer');
+    openChat();
+    closeMenu();
   };
 
   // Links para usuário logado
   const loggedInLinks = [
     { href: '/', label: 'Início', external: false },
     { href: '/matches', label: 'Oportunidades', external: false },
-    { href: CHAT_URL, label: 'Assistente IA', external: true, onClick: openAssistant },
+    { href: '#', label: 'Assistente IA', external: true, onClick: handleOpenAssistant },
     { href: '/dashboard', label: 'Perfil', external: false },
   ];
 
