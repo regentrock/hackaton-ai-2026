@@ -5,11 +5,11 @@
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-primary, #b02629), var(--color-primary-dark, #8d1206));
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
   color: white;
   border: none;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(176, 38, 41, 0.4);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
   transition: all 0.2s ease;
   z-index: 1000;
   display: flex;
@@ -20,26 +20,25 @@
 
 .chatButton:hover {
   transform: scale(1.05);
-  box-shadow: 0 8px 25px rgba(176, 38, 41, 0.5);
+  box-shadow: 0 6px 20px rgba(176, 38, 41, 0.4);
 }
 
-.overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
+.tooltip {
+  position: absolute;
+  bottom: 70px;
   right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
-  z-index: 1000;
-  backdrop-filter: blur(2px);
+  background: #1f2937;
+  color: white;
+  font-size: 0.7rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 0.5rem;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s;
 }
 
-@media (max-width: 640px) {
-  .chatButton {
-    width: 52px;
-    height: 52px;
-    bottom: 20px;
-    right: 20px;
-    font-size: 1.3rem;
-  }
+.chatButton:hover .tooltip {
+  opacity: 1;
+  visibility: visible;
 }
