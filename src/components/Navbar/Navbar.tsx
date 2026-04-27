@@ -39,38 +39,41 @@ export default function Navbar() {
     setIsMenuOpen(false);
   };
 
-  const openAssistant = () => {
+  const openAssistant = (e: React.MouseEvent) => {
+    e.preventDefault();
     window.open(CHAT_URL, '_blank', 'noopener,noreferrer');
   };
 
   // Links para usuário logado
   const loggedInLinks = [
-    { href: '/', label: 'Início', action: null },
-    { href: '/matches', label: 'Oportunidades', action: null },
-    { label: 'Assistente IA', action: openAssistant, icon: 'fas fa-robot' },
-    { href: '/dashboard', label: 'Perfil', action: null },
+    { href: '/', label: 'Início', external: false },
+    { href: '/matches', label: 'Oportunidades', external: false },
+    { href: CHAT_URL, label: 'Assistente IA', external: true, onClick: openAssistant },
+    { href: '/dashboard', label: 'Perfil', external: false },
   ];
 
   // Links para usuário não logado
   const loggedOutLinks = [
-    { href: '/', label: 'Início', action: null },
-    { href: '/login', label: 'Entrar', action: null },
-    { href: '/register', label: 'Cadastrar', action: null },
+    { href: '/', label: 'Início', external: false },
+    { href: '/login', label: 'Entrar', external: false },
+    { href: '/register', label: 'Cadastrar', external: false },
   ];
 
   const links = user ? loggedInLinks : loggedOutLinks;
 
   const renderLink = (link: any) => {
-    if (link.action) {
+    if (link.external) {
       return (
-        <button
+        <a
           key={link.label}
-          onClick={link.action}
+          href={link.href}
+          onClick={link.onClick}
           className={styles.navLink}
+          target="_blank"
+          rel="noopener noreferrer"
         >
-          {link.icon && <i className={link.icon} style={{ marginRight: '0.5rem' }}></i>}
           {link.label}
-        </button>
+        </a>
       );
     }
     return (
@@ -80,26 +83,27 @@ export default function Navbar() {
         className={`${styles.navLink} ${pathname === link.href ? styles.active : ''}`}
         onClick={closeMenu}
       >
-        {link.icon && <i className={link.icon} style={{ marginRight: '0.5rem' }}></i>}
         {link.label}
       </Link>
     );
   };
 
   const renderMobileLink = (link: any) => {
-    if (link.action) {
+    if (link.external) {
       return (
-        <button
+        <a
           key={link.label}
-          onClick={() => {
-            link.action();
+          href={link.href}
+          onClick={(e) => {
+            link.onClick(e);
             closeMenu();
           }}
           className={styles.mobileNavLink}
+          target="_blank"
+          rel="noopener noreferrer"
         >
-          {link.icon && <i className={link.icon} style={{ marginRight: '0.5rem', width: '20px' }}></i>}
           {link.label}
-        </button>
+        </a>
       );
     }
     return (
@@ -109,7 +113,6 @@ export default function Navbar() {
         className={`${styles.mobileNavLink} ${pathname === link.href ? styles.active : ''}`}
         onClick={closeMenu}
       >
-        {link.icon && <i className={link.icon} style={{ marginRight: '0.5rem', width: '20px' }}></i>}
         {link.label}
       </Link>
     );
