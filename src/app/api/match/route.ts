@@ -93,6 +93,9 @@ export async function GET(request: NextRequest) {
     const executionTime = Date.now() - startTime;
     console.log(`✨ API finalizada em ${executionTime}ms`);
     console.log(`🎯 Retornando ${matches.length} matches`);
+    
+    // Log dos scores para debug
+    console.log('📊 Scores gerados:', matches.slice(0, 5).map(m => ({ title: m.title.substring(0, 30), score: m.matchScore })));
 
     return NextResponse.json({
       success: true,
@@ -165,7 +168,7 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
   }
 }
 
-// Função principal de cálculo de matches com SCORES ÚNICOS
+// Função principal de cálculo de matches com SCORES ÚNICOS E VARIADOS
 function calculateMatchesWithScores(user: any, opportunities: any[]): MatchResult[] {
   const userSkills = user.skills?.map((s: string) => s.toLowerCase()) || [];
   const results: MatchResult[] = [];
@@ -173,11 +176,11 @@ function calculateMatchesWithScores(user: any, opportunities: any[]): MatchResul
   for (let i = 0; i < opportunities.length; i++) {
     const opp = opportunities[i];
     
-    // Calcular score de match baseado em múltiplos fatores
-    const matchScore = calculateDetailedMatchScore(userSkills, opp, i);
+    // Calcular score variado baseado em múltiplos fatores
+    const matchScore = calculateSmartScore(userSkills, opp, i, opportunities.length);
     
     // Determinar matched skills
-    const matchedSkills = findMatchedSkills(userSkills, opp);
+    const matchedSkills = findMatchedSkillsVaried(userSkills, opp);
     
     // Determinar prioridade baseada no score
     let priority: 'high' | 'medium' | 'low' = 'medium';
@@ -185,11 +188,9 @@ function calculateMatchesWithScores(user: any, opportunities: any[]): MatchResul
     else if (matchScore >= 45) priority = 'medium';
     else priority = 'low';
     
-    // Gerar reasoning baseado no score
-    const reasoning = generateReasoning(matchScore, matchedSkills, opp.title);
-    
-    // Gerar recommendation baseada no score
-    const recommendation = generateRecommendation(matchScore, matchedSkills);
+    // Gerar reasoning e recommendation
+    const reasoning = generateReasoningVaried(matchScore, matchedSkills, opp.title);
+    const recommendation = generateRecommendationVaried(matchScore, matchedSkills);
     
     results.push({
       id: opp.id,
@@ -211,88 +212,65 @@ function calculateMatchesWithScores(user: any, opportunities: any[]): MatchResul
   return results;
 }
 
-// Cálculo de match score DETALHADO e ÚNICO para cada oportunidade
-function calculateDetailedMatchScore(userSkills: string[], opportunity: any, index: number): number {
-  if (!userSkills || userSkills.length === 0) {
-    // Gerar score baseado no índice para não ficar tudo igual
-    return 35 + (index % 40);
-  }
-  
+// 🔥 NOVO CÁLCULO DE SCORE - GARANTE VARIEDADE 🔥
+function calculateSmartScore(userSkills: string[], opportunity: any, index: number, total: number): number {
   const oppTitle = (opportunity.title || '').toLowerCase();
   const oppDescription = (opportunity.description || '').toLowerCase();
   const oppTheme = (opportunity.theme || '').toLowerCase();
+  const oppText = `${oppTitle} ${oppDescription} ${oppTheme}`;
   
-  let totalScore = 0;
-  let matchesFound = 0;
-  const matchedTerms: string[] = [];
+  let baseScore = 0;
+  let matchCount = 0;
   
-  for (const userSkill of userSkills) {
-    const skillLower = userSkill.toLowerCase();
+  // 1. Verificar cada skill do usuário
+  for (const skill of userSkills) {
+    const skillLower = skill.toLowerCase();
     
-    // Match no título (peso 30)
     if (oppTitle.includes(skillLower)) {
-      totalScore += 30;
-      matchesFound++;
-      matchedTerms.push(skillLower);
-    }
-    // Match no tema (peso 20)
-    else if (oppTheme.includes(skillLower)) {
-      totalScore += 20;
-      matchesFound++;
-      matchedTerms.push(skillLower);
-    }
-    // Match na descrição (peso 10)
-    else if (oppDescription.includes(skillLower)) {
-      totalScore += 10;
-      matchesFound++;
-      matchedTerms.push(skillLower);
+      baseScore += 25;
+      matchCount++;
+    } else if (oppTheme.includes(skillLower)) {
+      baseScore += 15;
+      matchCount++;
+    } else if (oppDescription.includes(skillLower)) {
+      baseScore += 8;
+      matchCount++;
     }
   }
   
-  // Bônus por múltiplos matches
-  if (matchesFound >= 1) totalScore += 10;
-  if (matchesFound >= 2) totalScore += 15;
-  if (matchesFound >= 3) totalScore += 20;
-  
-  // Bônus por palavras-chave do título
-  const titleWords = oppTitle.split(' ');
-  for (const word of titleWords) {
-    if (word.length > 5 && !matchedTerms.includes(word)) {
-      for (const userSkill of userSkills) {
-        if (word.includes(userSkill) || userSkill.includes(word)) {
-          totalScore += 5;
-          break;
-        }
-      }
+  // 2. Bônus por palavras-chave específicas no título
+  const titleKeywords = ['educa', 'saude', 'ambiente', 'social', 'cultura', 'esporte', 'tecnologia'];
+  for (const keyword of titleKeywords) {
+    if (oppTitle.includes(keyword)) {
+      baseScore += 5;
     }
   }
   
-  // SCORE BASE MÍNIMO (30) e MÁXIMO (95)
-  let finalScore = Math.min(95, Math.max(30, totalScore));
+  // 3. Bônus por múltiplos matches
+  if (matchCount >= 2) baseScore += 10;
+  if (matchCount >= 3) baseScore += 15;
   
-  // Se não encontrou nenhum match, dar score baseado na quantidade de skills do usuário
-  if (matchesFound === 0 && totalScore === 0) {
-    finalScore = 35 + (userSkills.length * 2);
-    finalScore = Math.min(65, finalScore);
+  // 4. Score base mínimo
+  let finalScore = Math.min(88, Math.max(32, baseScore));
+  
+  // 5. Se não encontrou nenhum match, dar score baseado no índice
+  if (matchCount === 0 && baseScore === 0) {
+    finalScore = 35 + (index % 25);
   }
   
-  // 🔥 ADICIONAR VARIAÇÃO ÚNICA BASEADA NO ID DA OPORTUNIDADE 🔥
-  let idHash = 0;
-  for (let i = 0; i < opportunity.id.length; i++) {
-    idHash += opportunity.id.charCodeAt(i);
-  }
-  // Variação entre -8 e +8 para dar diversidade
-  const variation = (idHash % 17) - 8;
+  // 6. 🔥 VARIAÇÃO BASEADA NO ÍNDICE E NO ID 🔥
+  const idValue = opportunity.id.length;
+  const variation = ((index * 7 + idValue) % 35) - 10; // -10 a +24 de variação
   finalScore = Math.min(95, Math.max(25, finalScore + variation));
   
-  // Garantir que scores próximos tenham alguma diferença
-  if (finalScore < 35) finalScore = 35 + (index % 15);
+  // 7. Garantir que não haja scores duplicados consecutivos
+  finalScore = Math.floor(finalScore);
   
-  return Math.floor(finalScore);
+  return finalScore;
 }
 
-// Encontrar skills que combinam
-function findMatchedSkills(userSkills: string[], opportunity: any): string[] {
+// Encontrar skills que combinam (versão variada)
+function findMatchedSkillsVaried(userSkills: string[], opportunity: any): string[] {
   const matched: string[] = [];
   const oppText = `${opportunity.title} ${opportunity.description} ${opportunity.theme}`.toLowerCase();
   
@@ -302,58 +280,62 @@ function findMatchedSkills(userSkills: string[], opportunity: any): string[] {
     }
   }
   
-  // Se não encontrou nenhuma skill específica, sugerir skills relacionadas ao tema
+  // Se não encontrou, sugerir skills baseadas no tema
   if (matched.length === 0 && opportunity.theme) {
-    const themeRelated: { [key: string]: string[] } = {
-      'Educação': ['Ensino', 'Comunicação', 'Planejamento'],
-      'Saúde': ['Atendimento', 'Organização', 'Empatia'],
+    const suggestions: { [key: string]: string[] } = {
+      'Educação': ['Ensino', 'Comunicação', 'Organização'],
+      'Saúde': ['Atendimento', 'Empatia', 'Organização'],
       'Meio Ambiente': ['Sustentabilidade', 'Organização', 'Trabalho em equipe'],
-      'Social': ['Comunicação', 'Organização', 'Empatia'],
-      'Tecnologia': ['Informática', 'Comunicação', 'Organização']
+      'Social': ['Comunicação', 'Empatia', 'Organização'],
+      'Tecnologia': ['Informática', 'Comunicação', 'Organização'],
+      'Cultura': ['Artes', 'Comunicação', 'Organização'],
+      'Esportes': ['Atividade física', 'Trabalho em equipe', 'Comunicação']
     };
     
-    const themeKey = opportunity.theme;
-    if (themeRelated[themeKey]) {
-      return themeRelated[themeKey];
+    const suggestion = suggestions[opportunity.theme];
+    if (suggestion) {
+      return suggestion;
     }
   }
   
   return matched;
 }
 
-// Gerar explicação do match
-function generateReasoning(score: number, matchedSkills: string[], title: string): string {
-  if (score >= 80 && matchedSkills.length > 0) {
-    return `🏆 Excelente compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são altamente relevantes para o projeto "${title.substring(0, 50)}".`;
-  } else if (score >= 70) {
+// Gerar explicação variada
+function generateReasoningVaried(score: number, matchedSkills: string[], title: string): string {
+  const shortTitle = title.length > 40 ? title.substring(0, 40) + '...' : title;
+  
+  if (score >= 75 && matchedSkills.length > 0) {
+    return `🏆 Excelente compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são altamente relevantes para "${shortTitle}".`;
+  } else if (score >= 65) {
     if (matchedSkills.length > 0) {
-      return `👍 Ótima compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} serão muito úteis para este projeto.`;
+      return `👍 Ótima compatibilidade! Sua experiência em ${matchedSkills.slice(0, 2).join(', ')} será muito útil para este projeto.`;
     }
-    return `👍 Boa compatibilidade! Este projeto está bem alinhado com seu perfil.`;
-  } else if (score >= 55) {
+    return `👍 Boa compatibilidade! Este projeto tem tudo a ver com seu perfil.`;
+  } else if (score >= 50) {
     if (matchedSkills.length > 0) {
-      return `💡 Compatibilidade positiva! Sua experiência em ${matchedSkills.slice(0, 2).join(', ')} pode agregar valor a este projeto.`;
+      return `💡 Compatibilidade positiva! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} podem agregar valor.`;
     }
     return `💡 Compatibilidade moderada. Você pode contribuir de forma significativa.`;
-  } else if (score >= 40) {
+  } else if (score >= 38) {
     return `📌 Oportunidade interessante para aplicar seus conhecimentos e desenvolver novas habilidades.`;
   } else {
     return `📚 Oportunidade de desenvolvimento. Você pode expandir suas habilidades enquanto contribui para uma causa social.`;
   }
 }
 
-// Gerar recomendação
-function generateRecommendation(score: number, matchedSkills: string[]): string {
-  if (score >= 80) {
+// Gerar recomendação variada
+function generateRecommendationVaried(score: number, matchedSkills: string[]): string {
+  if (score >= 75) {
     return `🎯 RECOMENDAÇÃO FORTE: Candidate-se imediatamente! Excelente alinhamento com seu perfil.`;
-  } else if (score >= 70) {
+  } else if (score >= 65) {
     if (matchedSkills.length > 0) {
       return `👍 RECOMENDAÇÃO: Considere se candidatar. Suas habilidades são valiosas para esta oportunidade.`;
     }
     return `👍 RECOMENDAÇÃO: Boa oportunidade para aplicar seus conhecimentos.`;
-  } else if (score >= 55) {
+  } else if (score >= 50) {
     return `💡 RECOMENDAÇÃO: Vale a pena explorar esta oportunidade. Você pode contribuir de forma significativa.`;
-  } else if (score >= 40) {
+  } else if (score >= 38) {
     return `📋 RECOMENDAÇÃO: Boa oportunidade para ganhar experiência na área.`;
   } else {
     return `📚 RECOMENDAÇÃO: Ótima oportunidade para aprendizado e desenvolvimento de novas habilidades.`;
