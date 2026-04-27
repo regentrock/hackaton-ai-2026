@@ -40,7 +40,13 @@ export default function Navbar() {
 
   const handleOpenAssistant = (e: React.MouseEvent) => {
     e.preventDefault();
-    openChat();
+    if (user) {
+      openChat(user);
+    } else {
+      // Fallback: abrir sem contexto de usuário
+      const fallbackUrl = `https://dl.watson-orchestrate.ibm.com/chat?agentId=ae187a51-172a-4288-b5fe-fefae23ab71f&orchestrationId=20260423-1400-2730-305f-ec6ede7a1a7a_20260423-1400-4202-20dc-0f3e2d98827b`;
+      window.open(fallbackUrl, '_blank', 'noopener,noreferrer');
+    }
     closeMenu();
   };
 

@@ -10,10 +10,14 @@ export default function FloatingChatButton() {
 
   if (!user) return null;
 
+  const handleOpenChat = () => {
+    openChat(user);
+  };
+
   return (
     <button 
       className={styles.chatButton}
-      onClick={openChat}
+      onClick={handleOpenChat}
       aria-label="Abrir assistente IBM watsonx"
     >
       <i className="fas fa-comment-dots"></i>
