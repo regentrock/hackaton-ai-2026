@@ -244,13 +244,13 @@ function generateReasoning(score: number, matchedSkills: string[], title: string
 
 function generateRecommendation(score: number, matchedSkills: string[]): string {
   if (score >= 70 && matchedSkills.length > 0) {
-    return `🎯 RECOMENDAÇÃO FORTE: Candidate-se imediatamente! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são exatamente o que este projeto procura.`;
+    return `Recomendação forte: Candidate-se imediatamente! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são exatamente o que este projeto procura.`;
   } else if (score >= 50) {
     if (matchedSkills.length > 0) {
-      return `👍 RECOMENDAÇÃO: Considere se candidatar. Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são valiosas para esta oportunidade.`;
+      return `Recomendação: Considere se candidatar. Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são valiosas para esta oportunidade.`;
     }
-    return `💡 RECOMENDAÇÃO: Vale a pena explorar esta oportunidade. Você pode contribuir de forma significativa mesmo sem habilidades exatamente alinhadas.`;
+    return `Recomendação: Vale a pena explorar esta oportunidade. Você pode contribuir de forma significativa mesmo sem habilidades exatamente alinhadas.`;
   } else {
-    return `📚 RECOMENDAÇÃO: Esta é uma ótima oportunidade para aprendizado e desenvolvimento de novas habilidades. Considere se candidatar para expandir sua experiência.`;
+    return `Recomendação: Esta é uma ótima oportunidade para aprendizado e desenvolvimento de novas habilidades. Considere se candidatar para expandir sua experiência.`;
   }
 }
