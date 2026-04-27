@@ -29,12 +29,6 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now();
   console.log('\n🚀 ========== MATCH API COM IBM WATSONX ==========');
   
-  // Obter parâmetros de paginação
-  const url = new URL(request.url);
-  const page = parseInt(url.searchParams.get('page') || '1');
-  const limit = parseInt(url.searchParams.get('limit') || '20');
-  const offset = (page - 1) * limit;
-  
   try {
     // 1. Autenticação
     let token = request.cookies.get('auth_token')?.value;
@@ -79,7 +73,7 @@ export async function GET(request: NextRequest) {
     console.log('👤 Usuário:', user.name);
     console.log('🎯 Skills:', user.skills);
 
-    // 3. Buscar MAIS oportunidades (aumentado para 500 projetos brutos)
+    // 3. Buscar oportunidades
     let allOpportunities = await fetchOpportunitiesWithCache();
     
     if (allOpportunities.length === 0) {
@@ -87,59 +81,52 @@ export async function GET(request: NextRequest) {
         success: true,
         matches: [],
         total: 0,
-        page: 1,
-        hasMore: false,
         message: 'Nenhuma oportunidade encontrada no momento.'
       });
     }
 
-    console.log(`📦 Total de ${allOpportunities.length} oportunidades encontradas`);
+    console.log(`📦 Total de ${allOpportunities.length} oportunidades únicas encontradas`);
 
-    // 4. Analisar matches - AUMENTADO: de 80 para 300 projetos analisados pela IA
+    // 4. Analisar matches (apenas oportunidades únicas)
     let allMatches: MatchResult[] = [];
     
     try {
-      // Analisar 300 projetos com WatsonX (aumentado de 80 para 300)
-      allMatches = await analyzeMatchesWithWatsonX(user, allOpportunities.slice(0, 300));
+      // Remover duplicatas ANTES de enviar para análise
+      const uniqueOpportunities = removeDuplicates(allOpportunities);
+      console.log(`📊 Após remover duplicatas: ${uniqueOpportunities.length} oportunidades únicas`);
+      
+      allMatches = await analyzeMatchesWithWatsonX(user, uniqueOpportunities.slice(0, 150));
       console.log('✅ Análise concluída com IBM WatsonX');
     } catch (watsonxError) {
       console.error('⚠️ WatsonX falhou, usando algoritmo local:', watsonxError);
       allMatches = calculateLocalMatches(user, allOpportunities);
     }
 
-    // 5. Ordenar por score
-    allMatches.sort((a, b) => b.matchScore - a.matchScore);
+    // 5. Garantir que não há duplicatas nos matches
+    const uniqueMatches = removeDuplicateMatches(allMatches);
     
-    // 6. Paginar resultados
-    const paginatedMatches = allMatches.slice(offset, offset + limit);
-    const hasMore = offset + limit < allMatches.length;
-    const totalPages = Math.ceil(allMatches.length / limit);
+    // 6. Ordenar por score
+    uniqueMatches.sort((a, b) => b.matchScore - a.matchScore);
     
-    console.log(`\n📊 RESULTADOS:`);
-    console.log(`   📄 Página ${page} de ${totalPages}`);
-    console.log(`   🎯 Mostrando ${paginatedMatches.length} de ${allMatches.length} matches`);
-    console.log(`   🔥 Alta compatibilidade (70-100%): ${allMatches.filter(m => m.matchScore >= 70).length}`);
-    console.log(`   📌 Média compatibilidade (50-69%): ${allMatches.filter(m => m.matchScore >= 50 && m.matchScore < 70).length}`);
-    console.log(`   🌱 Baixa compatibilidade (0-49%): ${allMatches.filter(m => m.matchScore < 50).length}`);
-    console.log(`   🏆 Top score: ${allMatches[0]?.matchScore}%`);
-    console.log(`   📈 Score médio: ${Math.round(allMatches.reduce((acc, m) => acc + m.matchScore, 0) / allMatches.length)}%`);
+    console.log(`\n📊 RESULTADOS FINAIS:`);
+    console.log(`   🎯 ${uniqueMatches.length} matches únicos`);
+    console.log(`   🔥 Alta compatibilidade (70-100%): ${uniqueMatches.filter(m => m.matchScore >= 70).length}`);
+    console.log(`   📌 Média compatibilidade (50-69%): ${uniqueMatches.filter(m => m.matchScore >= 50 && m.matchScore < 70).length}`);
+    console.log(`   🌱 Baixa compatibilidade (0-49%): ${uniqueMatches.filter(m => m.matchScore < 50).length}`);
+    console.log(`   🏆 Top score: ${uniqueMatches[0]?.matchScore}%`);
 
     return NextResponse.json({
       success: true,
-      matches: paginatedMatches,
-      total: allMatches.length,
-      page: page,
-      totalPages: totalPages,
-      hasMore: hasMore,
-      limit: limit,
+      matches: uniqueMatches.slice(0, 50),
+      total: uniqueMatches.length,
       userSkills: user.skills || [],
       executionTimeMs: Date.now() - startTime,
       usingAI: true,
       stats: {
-        highMatches: allMatches.filter(m => m.matchScore >= 70).length,
-        mediumMatches: allMatches.filter(m => m.matchScore >= 50 && m.matchScore < 70).length,
-        lowMatches: allMatches.filter(m => m.matchScore < 50).length,
-        averageScore: Math.round(allMatches.reduce((acc, m) => acc + m.matchScore, 0) / allMatches.length)
+        highMatches: uniqueMatches.filter(m => m.matchScore >= 70).length,
+        mediumMatches: uniqueMatches.filter(m => m.matchScore >= 50 && m.matchScore < 70).length,
+        lowMatches: uniqueMatches.filter(m => m.matchScore < 50).length,
+        averageScore: Math.round(uniqueMatches.reduce((acc, m) => acc + m.matchScore, 0) / uniqueMatches.length)
       }
     });
 
@@ -150,6 +137,28 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// 🔥 FUNÇÃO PARA REMOVER DUPLICATAS DOS PROJETOS 🔥
+function removeDuplicates(opportunities: any[]): any[] {
+  const seen = new Map();
+  for (const opp of opportunities) {
+    if (!seen.has(opp.id)) {
+      seen.set(opp.id, opp);
+    }
+  }
+  return Array.from(seen.values());
+}
+
+// 🔥 FUNÇÃO PARA REMOVER DUPLICATAS DOS MATCHES 🔥
+function removeDuplicateMatches(matches: MatchResult[]): MatchResult[] {
+  const seen = new Map();
+  for (const match of matches) {
+    if (!seen.has(match.id)) {
+      seen.set(match.id, match);
+    }
+  }
+  return Array.from(seen.values());
 }
 
 // Obter token de acesso IBM Cloud
@@ -216,7 +225,7 @@ async function callGranite(prompt: string): Promise<string> {
   return data.results?.[0]?.generated_text || '';
 }
 
-// Analisar matches com IBM WatsonX - AUMENTADO para processar lotes maiores
+// Analisar matches com IBM WatsonX
 async function analyzeMatchesWithWatsonX(user: any, opportunities: any[]): Promise<MatchResult[]> {
   const results: MatchResult[] = [];
   const userSkills = user.skills?.join(', ') || 'Nenhuma habilidade listada';
@@ -224,11 +233,11 @@ async function analyzeMatchesWithWatsonX(user: any, opportunities: any[]): Promi
   
   console.log(`🔍 Analisando ${opportunities.length} oportunidades com IBM Granite...`);
   
-  // AUMENTADO: batch size de 5 para 8 (processa mais em paralelo)
-  const batchSize = 8;
+  // Processar em lotes
+  const batchSize = 5;
   for (let i = 0; i < opportunities.length; i += batchSize) {
     const batch = opportunities.slice(i, i + batchSize);
-    console.log(`   📦 Processando lote ${Math.floor(i/batchSize)+1}/${Math.ceil(opportunities.length/batchSize)} (${batch.length} oportunidades)`);
+    console.log(`   📦 Processando lote ${Math.floor(i/batchSize)+1}/${Math.ceil(opportunities.length/batchSize)}`);
     
     const batchPromises = batch.map(async (opp, idx) => {
       const prompt = `[INST] You are a volunteer matching expert. Analyze the match.
@@ -274,7 +283,8 @@ Return JSON only:
           theme: opp.theme,
           projectLink: opp.projectLink
         } as MatchResult;
-      } catch {
+      } catch (error) {
+        console.error(`   ❌ Erro na oportunidade ${idx}, usando fallback`);
         return calculateSingleMatch(user, opp, i + idx);
       }
     });
@@ -282,7 +292,6 @@ Return JSON only:
     const batchResults = await Promise.all(batchPromises);
     results.push(...batchResults);
     
-    // Delay reduzido para 800ms (antes 1000ms)
     await new Promise(resolve => setTimeout(resolve, 800));
   }
   
@@ -328,17 +337,17 @@ function calculateSingleMatch(user: any, opp: any, index: number): MatchResult {
   let recommendation = '';
   
   if (finalScore >= 75) {
-    reasoning = `Excelente compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são muito relevantes para este projeto.`;
-    recommendation = `Recomendação forte: Candidate-se imediatamente!`;
+    reasoning = `🏆 Excelente compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são muito relevantes para este projeto.`;
+    recommendation = `🎯 RECOMENDAÇÃO FORTE: Candidate-se imediatamente!`;
   } else if (finalScore >= 65) {
-    reasoning = `Ótima compatibilidade! Sua experiência em ${matchedSkills.slice(0, 2).join(', ')} será muito útil.`;
-    recommendation = `Recomendação: Considere se candidatar.`;
+    reasoning = `👍 Ótima compatibilidade! Sua experiência em ${matchedSkills.slice(0, 2).join(', ')} será muito útil.`;
+    recommendation = `👍 RECOMENDAÇÃO: Considere se candidatar.`;
   } else if (finalScore >= 50) {
-    reasoning = `Compatibilidade positiva! Você pode contribuir significativamente.`;
-    recommendation = `Recomendação: Vale a pena explorar esta oportunidade.`;
+    reasoning = `💡 Compatibilidade positiva! Você pode contribuir significativamente.`;
+    recommendation = `💡 RECOMENDAÇÃO: Vale a pena explorar esta oportunidade.`;
   } else {
-    reasoning = `Oportunidade interessante para desenvolver novas habilidades.`;
-    recommendation = `Recomendação: Ótima oportunidade para aprendizado.`;
+    reasoning = `📌 Oportunidade interessante para desenvolver novas habilidades.`;
+    recommendation = `📚 RECOMENDAÇÃO: Ótima oportunidade para aprendizado.`;
   }
   
   return {
@@ -359,12 +368,12 @@ function calculateSingleMatch(user: any, opp: any, index: number): MatchResult {
   };
 }
 
-// Buscar oportunidades com cache - AUMENTADO: 500 projetos em cache
+// Buscar oportunidades com cache
 async function fetchOpportunitiesWithCache(): Promise<any[]> {
   const now = Date.now();
   
   if (cachedProjects.length > 0 && (now - cacheTimestamp) < CACHE_DURATION) {
-    console.log('📦 Usando cache de projetos (${cachedProjects.length} projetos)');
+    console.log('📦 Usando cache de projetos');
     return cachedProjects;
   }
   
@@ -380,9 +389,8 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
     
     console.log('🌍 Buscando oportunidades da GlobalGiving...');
     
-    // AUMENTADO: de 3 para 10 páginas (até 500 projetos)
-    const MAX_PAGES = 10;
-    for (let page = 1; page <= MAX_PAGES; page++) {
+    // Buscar até 5 páginas (ajustável)
+    for (let page = 1; page <= 5; page++) {
       const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}&page=${page}`;
       
       const response = await fetch(url, {
@@ -391,29 +399,28 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
       });
 
       if (!response.ok) {
-        console.log(`⚠️ Página ${page}: erro ${response.status}, parando busca`);
+        console.log(`⚠️ Página ${page}: erro ${response.status}`);
         break;
       }
 
       const data = await response.json();
       const projects = data.projects?.project || [];
       
-      if (projects.length === 0) {
-        console.log(`📄 Página ${page}: nenhum projeto, fim da busca`);
-        break;
-      }
+      if (projects.length === 0) break;
       
       allProjects.push(...projects);
       console.log(`📄 Página ${page}: +${projects.length} projetos (total: ${allProjects.length})`);
       
-      // Pequeno delay entre páginas
       await new Promise(resolve => setTimeout(resolve, 100));
     }
     
     console.log(`📡 GlobalGiving: ${allProjects.length} projetos carregados`);
 
-    // AUMENTADO: cache de 150 para 500 projetos
-    cachedProjects = allProjects.slice(0, 500).map((project: any) => ({
+    // Remover duplicatas dos projetos
+    const uniqueProjects = removeDuplicates(allProjects);
+    console.log(`📊 Após remover duplicatas: ${uniqueProjects.length} projetos únicos`);
+
+    cachedProjects = uniqueProjects.slice(0, 200).map((project: any) => ({
       id: project.id,
       title: project.title || 'Projeto de Voluntariado',
       organization: project.organization?.name || 'GlobalGiving Partner',
@@ -424,8 +431,6 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
     }));
     
     cacheTimestamp = now;
-    
-    console.log(`💾 Cache atualizado com ${cachedProjects.length} projetos`);
     
     return cachedProjects;
     
