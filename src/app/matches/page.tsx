@@ -81,56 +81,6 @@ export default function MatchesPage() {
     }
   }
 
-  // 🔥 Função para calcular matchScore baseado nas habilidades do usuário
-  function calculateMatchScore(match: Match, userSkills: string[]): number {
-    if (!userSkills || userSkills.length === 0) return 45;
-    
-    const userSkillsLower = userSkills.map(s => s.toLowerCase());
-    const matchSkills = match.skills?.map(s => s.toLowerCase()) || [];
-    const matchText = `${match.title} ${match.description} ${match.theme}`.toLowerCase();
-    
-    let score = 0;
-    let matchesFound = 0;
-    
-    // Calcular match baseado nas skills
-    for (const userSkill of userSkillsLower) {
-      // Verificar nas skills da oportunidade
-      if (matchSkills.some(ms => ms.includes(userSkill) || userSkill.includes(ms))) {
-        matchesFound++;
-        score += 20;
-      }
-      // Verificar no texto da oportunidade
-      else if (matchText.includes(userSkill)) {
-        score += 10;
-      }
-    }
-    
-    // Garantir que o score não ultrapasse 95
-    score = Math.min(95, score);
-    
-    // Se não encontrou nenhum match, dar score base
-    if (matchesFound === 0 && score === 0) {
-      // Score baseado na relevância do tema
-      if (match.theme && userSkillsLower.includes(match.theme.toLowerCase())) {
-        score = 40;
-      } else {
-        score = 30;
-      }
-    }
-    
-    return Math.max(15, Math.min(95, score));
-  }
-
-  // 🔥 Função para enriquecer os matches com scores calculados
-  function enrichMatchesWithScores(matches: Match[], userSkills: string[]): Match[] {
-    return matches.map(match => ({
-      ...match,
-      matchScore: match.matchScore && match.matchScore > 0 
-        ? match.matchScore 
-        : calculateMatchScore(match, userSkills)
-    }));
-  }
-
   async function fetchMatches() {
     try {
       setLoading(true);
@@ -148,14 +98,12 @@ export default function MatchesPage() {
       const data = await res.json();
       
       if (data.success) {
-        const rawMatches = data.matches || [];
-        const userSkills = user?.skills || [];
+        const matches = data.matches || [];
         
-        // Enriquecer os matches com scores calculados
-        const enrichedMatches = enrichMatchesWithScores(rawMatches, userSkills);
+        // USAR O SCORE QUE VEIO DO BACKEND, não recalcular
+        const sortedMatches = [...matches].sort((a, b) => b.matchScore - a.matchScore);
         
-        // Ordenar por matchScore (maior primeiro)
-        const sortedMatches = [...enrichedMatches].sort((a, b) => b.matchScore - a.matchScore);
+        console.log('📊 Matches com scores:', sortedMatches.map(m => ({ title: m.title.substring(0, 30), score: m.matchScore })));
         
         setAllMatches(sortedMatches);
         setTopMatches(sortedMatches.slice(0, 6));
@@ -198,6 +146,20 @@ export default function MatchesPage() {
       
       if (data.success) {
         setSavedOpportunities(prev => new Set(prev).add(match.id));
+        
+        // Feedback visual temporário
+        const button = document.getElementById(`save-btn-${match.id}`);
+        if (button) {
+          const originalHtml = button.innerHTML;
+          button.innerHTML = '<i class="fas fa-check"></i> Salvo!';
+          button.classList.add(styles.saved);
+          setTimeout(() => {
+            if (button) {
+              button.innerHTML = originalHtml;
+              button.classList.remove(styles.saved);
+            }
+          }, 2000);
+        }
       } else {
         alert('Erro ao salvar: ' + (data.error || 'Tente novamente'));
       }
@@ -212,8 +174,8 @@ export default function MatchesPage() {
   const getFilteredTopMatches = () => {
     if (activeFilter === 'all') return topMatches;
     return topMatches.filter(m => {
-      if (activeFilter === 'high') return m.matchScore >= 70;
-      if (activeFilter === 'medium') return m.matchScore >= 40 && m.matchScore < 70;
+      if (activeFilter === 'high') return m.matchScore >= 65;
+      if (activeFilter === 'medium') return m.matchScore >= 40 && m.matchScore < 65;
       if (activeFilter === 'low') return m.matchScore < 40;
       return true;
     });
@@ -223,8 +185,8 @@ export default function MatchesPage() {
     let filtered = moreMatches;
     if (moreFilter !== 'all') {
       filtered = filtered.filter(m => {
-        if (moreFilter === 'high') return m.matchScore >= 70;
-        if (moreFilter === 'medium') return m.matchScore >= 40 && m.matchScore < 70;
+        if (moreFilter === 'high') return m.matchScore >= 65;
+        if (moreFilter === 'medium') return m.matchScore >= 40 && m.matchScore < 65;
         if (moreFilter === 'low') return m.matchScore < 40;
         return true;
       });
@@ -240,8 +202,8 @@ export default function MatchesPage() {
     let filtered = moreMatches;
     if (moreFilter !== 'all') {
       filtered = filtered.filter(m => {
-        if (moreFilter === 'high') return m.matchScore >= 70;
-        if (moreFilter === 'medium') return m.matchScore >= 40 && m.matchScore < 70;
+        if (moreFilter === 'high') return m.matchScore >= 65;
+        if (moreFilter === 'medium') return m.matchScore >= 40 && m.matchScore < 65;
         if (moreFilter === 'low') return m.matchScore < 40;
         return true;
       });
@@ -252,8 +214,8 @@ export default function MatchesPage() {
   const filteredTopMatches = getFilteredTopMatches();
   const filteredMoreMatches = getFilteredMoreMatches();
   
-  const highCount = topMatches.filter(m => m.matchScore >= 70).length;
-  const mediumCount = topMatches.filter(m => m.matchScore >= 40 && m.matchScore < 70).length;
+  const highCount = topMatches.filter(m => m.matchScore >= 65).length;
+  const mediumCount = topMatches.filter(m => m.matchScore >= 40 && m.matchScore < 65).length;
   const lowCount = topMatches.filter(m => m.matchScore < 40).length;
   const moreTotal = moreMatches.length;
 
@@ -609,7 +571,7 @@ function getScoreClass(score: number): string {
 }
 
 function getPriorityClass(score: number): string {
-  if (score >= 70) return 'high';
-  if (score >= 45) return 'medium';
+  if (score >= 65) return 'high';
+  if (score >= 40) return 'medium';
   return 'low';
 }
