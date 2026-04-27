@@ -16,7 +16,6 @@ export const metadata: Metadata = {
     shortcut: '/logo-icon.png',
     apple: '/logo-icon.png',
   },
-  manifest: '/site.webmanifest',
   openGraph: {
     title: 'VoluntaRe - Plataforma de Voluntariado com IA',
     description: 'Conectamos voluntários a causas que transformam vidas usando inteligência artificial.',
