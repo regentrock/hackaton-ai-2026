@@ -1,36 +1,159 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🌍 AI Volunteer Matcher
 
-## Getting Started
+### Conectando pessoas a causas com inteligência
 
-First, run the development server:
+Plataforma que utiliza **IA com IBM watsonx Orchestrate** para analisar o perfil de voluntários e conectá-los automaticamente a oportunidades reais de impacto social.
+
+---
+
+## Visão Geral
+
+O projeto resolve um problema real:
+
+> Pessoas querem ajudar, mas não sabem onde se encaixam.
+
+Nossa solução utiliza **inteligência artificial** para:
+
+* entender habilidades do usuário
+* identificar áreas de atuação
+* gerar recomendações personalizadas
+* conectar com oportunidades reais de voluntariado
+
+---
+
+## Como Funciona
+
+1. O usuário cria uma conta e descreve suas habilidades
+2. A IA (Watsonx Orchestrate) analisa o perfil
+3. O sistema busca oportunidades via API
+4. Um algoritmo de match gera compatibilidade
+5. O usuário recebe recomendações personalizadas
+
+---
+
+## Inteligência Artificial
+
+Utilizamos **IBM watsonx Orchestrate** para:
+
+* análise de descrição do usuário
+* extração de skills
+* classificação de perfil
+* recomendação de oportunidades
+* interação via assistente inteligente
+
+---
+
+## Integrações
+
+* API de oportunidades: GlobalGiving
+* IA: IBM Watsonx Orchestrate
+* Sistema de matching próprio
+
+---
+
+## Funcionalidades
+
+### Autenticação
+
+* Cadastro e login de usuários
+* Persistência de sessão
+
+---
+
+### Dashboard
+
+* Visualização do perfil
+* Skills detectadas pela IA
+* Oportunidades salvas
+
+---
+
+### Oportunidades
+
+* Listagem de vagas reais
+* Match inteligente baseado no perfil
+* Score de compatibilidade
+* Salvamento de oportunidades
+
+---
+
+### Assistente IA
+
+* Chat com agente personalizado
+* Suporte ao usuário
+* Recomendações guiadas
+
+---
+
+## Estrutura do Projeto
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Tecnologias Utilizadas
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+* **Frontend:** Next.js + React + TailwindCSS
+* **Backend:** Node.js (API Routes)
+* **Banco de dados:** PostgreSQL (Supabase)
+* **ORM:** Prisma
+* **IA:** IBM Watsonx Orchestrate
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## Design
 
-To learn more about Next.js, take a look at the following resources:
+O design foi pensado para transmitir:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+* urgência (vermelhos)
+* confiança (azul escuro)
+* humanização (tons neutros)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Inspirado em cenários de **resposta a desastres naturais**.
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Diferenciais
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+* IA que entende o usuário (não só coleta dados)
+* Integração com oportunidades reais
+* Matching inteligente
+* Assistente conversacional integrado
+* Interface moderna e imersiva
+
+---
+
+## Possíveis Melhorias
+
+* Sistema de notificações
+* Geolocalização de oportunidades
+* Avaliação de voluntários
+* Integração com mais APIs
+* Sistema de ranking de impacto
+
+---
+
+## Público-Alvo
+
+* Voluntários iniciantes
+* ONGs
+* Projetos sociais
+* Organizações de resposta a desastres
+
+---
+
+## Conclusão
+
+Este projeto demonstra como a IA pode:
+
+> transformar intenção em ação real
+
+Conectando pessoas certas às causas certas, no momento certo.
+
+---
+
+## Demo
+
+https://hackaton-ai-2026.vercel.app/
+
+---
+
+## Desenvolvido para Hackathon
