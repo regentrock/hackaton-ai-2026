@@ -1,4 +1,4 @@
-// app/api/match/route.ts - INTEGRAÇÃO COMPLETA COM IBM WATSONX
+// app/api/match/route.ts - VERSÃO CORRIGIDA SEM FALLBACK
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/src/lib/auth/authUtils';
 
@@ -23,9 +23,6 @@ interface MatchResult {
 let cachedProjects: any[] = [];
 let cacheTimestamp = 0;
 const CACHE_DURATION = 5 * 60 * 1000;
-
-// Cache para análise do perfil do usuário (1 hora)
-let userProfileCache: Map<string, { timestamp: number, profile: any }> = new Map();
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
@@ -75,31 +72,8 @@ export async function GET(request: NextRequest) {
     console.log('👤 Usuário:', user.name);
     console.log('🎯 Skills:', user.skills);
     console.log('📝 Sobre:', user.description);
-    console.log('📍 Localização:', user.location);
 
-    // 3. Obter token de acesso IBM Cloud
-    const ibmToken = await getIBMAccessToken();
-    
-    if (!ibmToken) {
-      console.error('❌ Não foi possível obter token IBM');
-      // Fallback: usar análise local
-      return handleLocalFallback(user);
-    }
-
-    // 4. Analisar perfil do usuário com WatsonX (com cache)
-    let userProfile = userProfileCache.get(user.id)?.profile;
-    const now = Date.now();
-    
-    if (!userProfile || (now - (userProfileCache.get(user.id)?.timestamp || 0)) > 60 * 60 * 1000) {
-      console.log('🧠 Analisando perfil do usuário com IBM WatsonX...');
-      userProfile = await analyzeUserProfileWithWatsonX(ibmToken, user);
-      userProfileCache.set(user.id, { timestamp: now, profile: userProfile });
-      console.log('✅ Perfil analisado:', JSON.stringify(userProfile, null, 2));
-    } else {
-      console.log('📦 Usando perfil em cache');
-    }
-
-    // 5. Buscar oportunidades
+    // 3. Buscar oportunidades
     let opportunities = await fetchOpportunitiesWithCache();
     
     if (opportunities.length === 0) {
@@ -110,15 +84,26 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    console.log(`📦 ${opportunities.length} oportunidades para analisar`);
+    console.log(`📦 ${opportunities.length} oportunidades encontradas`);
 
-    // 6. Analisar matches com WatsonX (em lotes)
+    // 4. Obter token IBM Cloud
+    const ibmToken = await getIBMAccessToken();
+    if (!ibmToken) {
+      throw new Error('Não foi possível obter token de acesso IBM Cloud');
+    }
+    console.log('✅ Token IBM Cloud obtido com sucesso');
+
+    // 5. Analisar perfil do usuário com WatsonX
+    const userProfile = await analyzeUserProfileWithWatsonX(ibmToken, user);
+    console.log('✅ Perfil analisado pela WatsonX:', JSON.stringify(userProfile, null, 2));
+
+    // 6. Analisar matches com WatsonX
     const matches = await analyzeMatchesWithWatsonX(ibmToken, userProfile, user, opportunities);
     
     // 7. Ordenar por score
     matches.sort((a, b) => b.matchScore - a.matchScore);
     
-    console.log('\n📊 RESULTADOS DA ANÁLISE WATSONX:');
+    console.log('\n📊 RESULTADOS FINAIS:');
     console.log(`   🔥 Alta compatibilidade (70-100%): ${matches.filter(m => m.matchScore >= 70).length}`);
     console.log(`   📌 Média compatibilidade (45-69%): ${matches.filter(m => m.matchScore >= 45 && m.matchScore < 70).length}`);
     console.log(`   🌱 Baixa compatibilidade (0-44%): ${matches.filter(m => m.matchScore < 45).length}`);
@@ -126,12 +111,12 @@ export async function GET(request: NextRequest) {
     console.log('\n🏆 TOP 10 MATCHES:');
     matches.slice(0, 10).forEach((m, i) => {
       console.log(`   ${i+1}. ${m.matchScore}% - ${m.title.substring(0, 55)}...`);
-      console.log(`      Skills: ${m.matchedSkills.slice(0, 3).join(', ')}`);
+      console.log(`      ${m.reasoning.substring(0, 80)}...`);
     });
 
     return NextResponse.json({
       success: true,
-      matches: matches.slice(0, 60),
+      matches: matches.slice(0, 50),
       total: matches.length,
       userSkills: user.skills || [],
       userProfile: userProfile,
@@ -141,9 +126,10 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('❌ ERRO:', error);
+    console.error('❌ ERRO NA API:', error);
+    // Retornar erro detalhado para debug (remover em produção)
     return NextResponse.json(
-      { error: error.message || 'Internal server error' },
+      { error: error.message || 'Internal server error', details: error.toString() },
       { status: 500 }
     );
   }
@@ -154,8 +140,10 @@ async function getIBMAccessToken(): Promise<string | null> {
   const apiKey = process.env.IBM_API_KEY;
   const url = 'https://iam.cloud.ibm.com/identity/token';
   
+  console.log('🔑 Solicitando token IBM Cloud...');
+  
   if (!apiKey) {
-    console.error('❌ IBM_API_KEY não configurada');
+    console.error('❌ IBM_API_KEY não configurada no .env');
     return null;
   }
   
@@ -173,7 +161,8 @@ async function getIBMAccessToken(): Promise<string | null> {
     });
     
     if (!response.ok) {
-      console.error(`❌ Erro ao obter token: ${response.status}`);
+      const errorText = await response.text();
+      console.error(`❌ Erro ao obter token: ${response.status} - ${errorText}`);
       return null;
     }
     
@@ -189,114 +178,149 @@ async function getIBMAccessToken(): Promise<string | null> {
 
 // Analisar perfil do usuário com WatsonX
 async function analyzeUserProfileWithWatsonX(ibmToken: string, user: any): Promise<any> {
-  const prompt = `Analise o seguinte perfil de voluntário e retorne APENAS UM JSON válido:
+  const prompt = `Analyze the following volunteer profile and return ONLY valid JSON (no other text):
 
-PERFIL:
-- Nome: ${user.name}
-- Habilidades: ${user.skills?.join(', ') || 'Não informado'}
-- Sobre o voluntário: ${user.description || 'Não informado'}
-- Localização: ${user.location || 'Não informado'}
-- Disponibilidade: ${user.availability || 'Não informado'}
+VOLUNTEER PROFILE:
+- Name: ${user.name}
+- Skills: ${user.skills?.join(', ') || 'Not informed'}
+- About: ${user.description || 'Not informed'}
+- Location: ${user.location || 'Not informed'}
+- Availability: ${user.availability || 'Not informed'}
 
-Responda EXATAMENTE neste formato JSON (sem texto adicional):
+Return EXACTLY this JSON format:
 {
-  "primary_category": "string (Educação, Saúde, Meio Ambiente, Social, Tecnologia, Cultura, Esportes, Animais)",
+  "primary_category": "string (Education, Health, Environment, Social, Technology, Culture, Sports, Animals)",
   "secondary_categories": ["string"],
   "key_skills": ["string"],
   "interests": ["string"],
-  "experience_level": "string (iniciante, intermediário, avançado)",
+  "experience_level": "string (beginner, intermediate, advanced)",
   "personality_traits": ["string"],
-  "summary": "string (resumo do perfil em português)"
+  "summary": "string (brief profile summary in English)"
 }`;
 
-  return await callWatsonXGeneration(ibmToken, prompt);
+  console.log('🧠 Analisando perfil do usuário com WatsonX...');
+  const response = await callWatsonXGeneration(ibmToken, prompt);
+  console.log('📝 Resposta da WatsonX (perfil):', response.substring(0, 200));
+  
+  try {
+    // Tentar extrair JSON da resposta
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    return JSON.parse(response);
+  } catch (error) {
+    console.error('❌ Erro ao fazer parse do JSON do perfil:', error);
+    throw new Error('Falha ao analisar resposta da WatsonX para o perfil');
+  }
 }
 
-// Analisar matches em lote
+// Analisar matches com WatsonX
 async function analyzeMatchesWithWatsonX(ibmToken: string, userProfile: any, user: any, opportunities: any[]): Promise<MatchResult[]> {
   const results: MatchResult[] = [];
-  const batchSize = 5; // Processar 5 por vez para não sobrecarregar
   
   console.log(`🔍 Analisando ${opportunities.length} oportunidades com WatsonX...`);
   
-  // Processar em lotes
-  for (let i = 0; i < opportunities.length; i += batchSize) {
-    const batch = opportunities.slice(i, i + batchSize);
-    const batchPromises = batch.map(async (opp, idx) => {
-      const score = await analyzeSingleMatch(ibmToken, userProfile, user, opp);
-      return score;
-    });
+  // Processar em lotes de 3 para não sobrecarregar
+  for (let i = 0; i < opportunities.length; i++) {
+    const opp = opportunities[i];
     
-    const batchResults = await Promise.all(batchPromises);
-    results.push(...batchResults);
-    
-    console.log(`   Processados ${Math.min(i + batchSize, opportunities.length)}/${opportunities.length} oportunidades`);
-  }
-  
-  return results;
-}
+    const prompt = `Compare the volunteer profile with the opportunity and return ONLY valid JSON.
 
-// Analisar um único match
-async function analyzeSingleMatch(ibmToken: string, userProfile: any, user: any, opp: any): Promise<MatchResult> {
-  const prompt = `Compare o perfil do voluntário com a oportunidade e retorne APENAS UM JSON.
+VOLUNTEER PROFILE:
+- Primary category: ${userProfile.primary_category}
+- Secondary categories: ${userProfile.secondary_categories?.join(', ')}
+- Key skills: ${userProfile.key_skills?.join(', ')}
+- Interests: ${userProfile.interests?.join(', ')}
+- Experience level: ${userProfile.experience_level}
+- Summary: ${userProfile.summary}
 
-PERFIL DO VOLUNTÁRIO:
-- Categoria principal: ${userProfile.primary_category}
-- Categorias secundárias: ${userProfile.secondary_categories?.join(', ')}
-- Habilidades: ${userProfile.key_skills?.join(', ')}
-- Interesses: ${userProfile.interests?.join(', ')}
-- Nível de experiência: ${userProfile.experience_level}
-- Resumo: ${userProfile.summary}
+OPPORTUNITY:
+- Title: ${opp.title}
+- Theme: ${opp.theme}
+- Description: ${opp.description?.substring(0, 600)}
+- Location: ${opp.location}
 
-OPORTUNIDADE:
-- Título: ${opp.title}
-- Tema: ${opp.theme}
-- Descrição: ${opp.description?.substring(0, 600)}
-- Localização: ${opp.location}
-
-Responda EXATAMENTE neste formato JSON:
+Return EXACTLY this JSON format:
 {
-  "matchScore": number (0-100, seja criterioso),
-  "matchedSkills": ["string"] (habilidades que combinam, máximo 4),
-  "reasoning": "string (explicação em português do porquê esse match é bom ou não)",
-  "recommendation": "string (recomendação personalizada para o voluntário em português)",
+  "matchScore": number (0-100, be strict and realistic),
+  "matchedSkills": ["string"] (maximum 4 skills that match),
+  "reasoning": "string (explanation in English why this is a good or bad match)",
+  "recommendation": "string (personalized recommendation for the volunteer in English)",
   "relevanceLevel": "high" | "medium" | "low"
 }`;
 
-  try {
-    const response = await callWatsonXGeneration(ibmToken, prompt);
-    const analysis = JSON.parse(response);
-    
-    // Validar e ajustar valores
-    const matchScore = Math.min(100, Math.max(0, analysis.matchScore || 50));
-    
-    return {
-      id: opp.id,
-      title: opp.title,
-      organization: opp.organization,
-      location: opp.location,
-      description: opp.description?.substring(0, 300),
-      skills: [],
-      matchScore: matchScore,
-      matchedSkills: (analysis.matchedSkills || []).slice(0, 4),
-      missingSkills: [],
-      reasoning: analysis.reasoning || `Compatibilidade baseada no seu perfil de ${userProfile.primary_category}.`,
-      recommendation: analysis.recommendation || `Recomendamos que você conheça mais sobre esta oportunidade.`,
-      priority: analysis.relevanceLevel === 'high' ? 'high' : analysis.relevanceLevel === 'medium' ? 'medium' : 'low',
-      theme: opp.theme,
-      projectLink: opp.projectLink
-    };
-  } catch (error) {
-    console.error(`⚠️ Erro analisando oportunidade ${opp.title}:`, error);
-    // Fallback
-    return generateFallbackMatch(userProfile, opp);
+    try {
+      const response = await callWatsonXGeneration(ibmToken, prompt);
+      console.log(`   ✅ Oportunidade ${i+1}/${opportunities.length} analisada`);
+      
+      // Extrair JSON da resposta
+      let analysis;
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        analysis = JSON.parse(jsonMatch[0]);
+      } else {
+        analysis = JSON.parse(response);
+      }
+      
+      // Validar e ajustar valores
+      const matchScore = Math.min(100, Math.max(0, analysis.matchScore || 50));
+      
+      results.push({
+        id: opp.id,
+        title: opp.title,
+        organization: opp.organization,
+        location: opp.location,
+        description: opp.description?.substring(0, 300),
+        skills: [],
+        matchScore: matchScore,
+        matchedSkills: (analysis.matchedSkills || []).slice(0, 4),
+        missingSkills: [],
+        reasoning: analysis.reasoning || `This opportunity aligns with your ${userProfile.primary_category} profile.`,
+        recommendation: analysis.recommendation || `We recommend you explore this opportunity further.`,
+        priority: analysis.relevanceLevel === 'high' ? 'high' : analysis.relevanceLevel === 'medium' ? 'medium' : 'low',
+        theme: opp.theme,
+        projectLink: opp.projectLink
+      });
+      
+      // Pequeno delay para não sobrecarregar a API
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+    } catch (error) {
+      console.error(`❌ Erro ao analisar oportunidade ${i}:`, error);
+      throw error; // Parar a execução se falhar - sem fallback
+    }
   }
+  
+  return results;
 }
 
 // Chamar API de geração do WatsonX
 async function callWatsonXGeneration(ibmToken: string, prompt: string): Promise<string> {
   const url = `${process.env.IBM_URL}/ml/v1/text/generation?version=2023-05-29`;
   const projectId = process.env.IBM_PROJECT_ID;
+  
+  console.log('📡 Chamando IBM WatsonX API...');
+  
+  if (!projectId) {
+    throw new Error('IBM_PROJECT_ID não configurado no .env');
+  }
+  
+  const requestBody = {
+    input: prompt,
+    parameters: {
+      max_new_tokens: 800,
+      temperature: 0.2,
+      top_p: 0.9,
+      top_k: 50,
+      repetition_penalty: 1.1,
+      stop_sequences: ["```", "}"]
+    },
+    model_id: 'meta-llama/llama-3-2-3b-instruct',
+    project_id: projectId
+  };
+  
+  console.log('📤 Request body:', JSON.stringify(requestBody, null, 2).substring(0, 500));
   
   try {
     const response = await fetch(url, {
@@ -305,38 +329,20 @@ async function callWatsonXGeneration(ibmToken: string, prompt: string): Promise<
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${ibmToken}`
       },
-      body: JSON.stringify({
-        input: prompt,
-        parameters: {
-          max_new_tokens: 800,
-          temperature: 0.2,
-          top_p: 0.9,
-          top_k: 50,
-          repetition_penalty: 1.1,
-          stop_sequences: ["```", "}"]
-        },
-        model_id: 'meta-llama/llama-3-2-3b-instruct',
-        project_id: projectId
-      })
+      body: JSON.stringify(requestBody)
     });
     
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`❌ WatsonX API error ${response.status}: ${errorText}`);
-      throw new Error(`WatsonX API error: ${response.status}`);
+      throw new Error(`WatsonX API error: ${response.status} - ${errorText}`);
     }
     
     const data = await response.json();
-    let generatedText = data.results?.[0]?.generated_text || '';
+    console.log('✅ WatsonX respondeu com sucesso');
     
-    // Limpar a resposta para extrair apenas o JSON
-    generatedText = generatedText.trim();
-    
-    // Tentar extrair JSON da resposta
-    const jsonMatch = generatedText.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return jsonMatch[0];
-    }
+    const generatedText = data.results?.[0]?.generated_text || '';
+    console.log('📝 Resposta gerada:', generatedText.substring(0, 300));
     
     return generatedText;
     
@@ -358,8 +364,7 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
   const apiKey = process.env.GLOBAL_GIVING_API_KEY;
   
   if (!apiKey) {
-    console.error('❌ API Key não configurada');
-    return [];
+    throw new Error('GLOBAL_GIVING_API_KEY não configurada');
   }
 
   try {
@@ -367,7 +372,7 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
     
     console.log('🌍 Buscando oportunidades da GlobalGiving...');
     
-    for (let page = 1; page <= 12; page++) {
+    for (let page = 1; page <= 10; page++) {
       const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}&page=${page}`;
       
       const response = await fetch(url, {
@@ -375,7 +380,10 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
         cache: 'no-store'
       });
 
-      if (!response.ok) break;
+      if (!response.ok) {
+        console.log(`⚠️ Página ${page}: erro ${response.status}`);
+        break;
+      }
 
       const data = await response.json();
       const projects = data.projects?.project || [];
@@ -383,7 +391,7 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
       if (projects.length === 0) break;
       
       allProjects.push(...projects);
-      console.log(`📄 Página ${page}: +${projects.length} projetos`);
+      console.log(`📄 Página ${page}: +${projects.length} projetos (total: ${allProjects.length})`);
       
       await new Promise(resolve => setTimeout(resolve, 50));
     }
@@ -406,78 +414,6 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
     
   } catch (error) {
     console.error('❌ Erro ao buscar oportunidades:', error);
-    return [];
+    throw error;
   }
-}
-
-// Fallback quando WatsonX não está disponível
-async function handleLocalFallback(user: any): Promise<NextResponse> {
-  console.log('⚠️ Usando fallback local para análise');
-  
-  // Análise local simples baseada nas skills
-  const primaryCategory = detectPrimaryCategoryLocal(user);
-  
-  return NextResponse.json({
-    success: true,
-    matches: [],
-    message: 'Modo de demonstração. Conecte com IBM WatsonX para análises avançadas.',
-    userSkills: user.skills || [],
-    usingAI: false,
-    suggestedCategory: primaryCategory
-  });
-}
-
-function detectPrimaryCategoryLocal(user: any): string {
-  const text = `${user.skills?.join(' ')} ${user.description || ''}`.toLowerCase();
-  
-  if (text.includes('ensin') || text.includes('professor') || text.includes('pedagog') || text.includes('educaç')) {
-    return 'Educação';
-  }
-  if (text.includes('saúde') || text.includes('medic') || text.includes('enferm')) {
-    return 'Saúde';
-  }
-  if (text.includes('ambient') || text.includes('ecolog') || text.includes('sustent')) {
-    return 'Meio Ambiente';
-  }
-  if (text.includes('tecnolog') || text.includes('programaç') || text.includes('software')) {
-    return 'Tecnologia';
-  }
-  if (text.includes('social') || text.includes('comunidade')) {
-    return 'Social';
-  }
-  return 'Voluntariado';
-}
-
-function generateFallbackMatch(userProfile: any, opp: any): MatchResult {
-  let baseScore = 50;
-  const oppText = `${opp.title} ${opp.theme}`.toLowerCase();
-  
-  if (userProfile.primary_category && oppText.includes(userProfile.primary_category.toLowerCase())) {
-    baseScore += 25;
-  }
-  
-  for (const skill of userProfile.key_skills || []) {
-    if (oppText.includes(skill.toLowerCase())) {
-      baseScore += 10;
-    }
-  }
-  
-  const finalScore = Math.min(95, Math.max(25, baseScore));
-  
-  return {
-    id: opp.id,
-    title: opp.title,
-    organization: opp.organization,
-    location: opp.location,
-    description: opp.description?.substring(0, 300),
-    skills: [],
-    matchScore: finalScore,
-    matchedSkills: (userProfile.key_skills || []).slice(0, 4),
-    missingSkills: [],
-    reasoning: `Compatibilidade baseada no seu perfil de ${userProfile.primary_category}.`,
-    recommendation: `Recomendamos que você conheça mais sobre esta oportunidade.`,
-    priority: finalScore >= 70 ? 'high' : finalScore >= 45 ? 'medium' : 'low',
-    theme: opp.theme,
-    projectLink: opp.projectLink
-  };
 }
