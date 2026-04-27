@@ -17,7 +17,6 @@ export default function FloatingChatButton() {
       aria-label="Abrir assistente"
     >
       <i className="fas fa-comment-dots"></i>
-      <span className={styles.tooltip}>Assistente IA</span>
     </button>
   );
 }

@@ -10,13 +10,34 @@ const CHAT_URL = "https://dl.watson-orchestrate.ibm.com/chat?agentId=ae187a51-17
 export default function AssistantPage() {
   const { user, loading } = useAuth();
   const router = useRouter();
-  const [iframeLoading, setIframeLoading] = useState(true);
+  const [redirecting, setRedirecting] = useState(false);
+  const [countdown, setCountdown] = useState(3);
 
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
+      return;
     }
-  }, [user, loading, router]);
+
+    if (user && !redirecting) {
+      setRedirecting(true);
+      
+      // Iniciar contagem regressiva
+      const interval = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(interval);
+            // Abrir em nova aba
+            window.open(CHAT_URL, '_blank', 'noopener,noreferrer');
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [user, loading, router, redirecting]);
 
   if (loading) {
     return (
@@ -31,47 +52,38 @@ export default function AssistantPage() {
 
   return (
     <div className={styles.container}>
-      {/* Header */}
-      <div className={styles.header}>
-        <button onClick={() => router.back()} className={styles.backButton}>
-          <i className="fas fa-arrow-left"></i>
-          Voltar
-        </button>
-        <div className={styles.headerContent}>
-          <div className={styles.headerIcon}>
-            <i className="fas fa-robot"></i>
-          </div>
-          <h1 className={styles.title}>Assistente VoluntaRe</h1>
-          <p className={styles.description}>
-            Converse com nosso assistente inteligente para encontrar oportunidades de voluntariado
-          </p>
+      <div className={styles.card}>
+        <div className={styles.iconWrapper}>
+          <i className="fas fa-robot"></i>
         </div>
-      </div>
-
-      {/* Chat Container */}
-      <div className={styles.chatWrapper}>
-        {iframeLoading && (
-          <div className={styles.iframeLoader}>
-            <div className={styles.spinner}></div>
-            <p>Conectando ao assistente...</p>
+        <h1 className={styles.title}>Assistente VoluntaRe</h1>
+        <p className={styles.description}>
+          O assistente será aberto em uma nova janela para garantir a melhor experiência.
+        </p>
+        
+        {countdown > 0 ? (
+          <div className={styles.countdown}>
+            <div className={styles.countdownNumber}>{countdown}</div>
+            <p>Abrindo em {countdown} segundo{countdown !== 1 ? 's' : ''}...</p>
+          </div>
+        ) : (
+          <div className={styles.info}>
+            <i className="fas fa-external-link-alt"></i>
+            <p>Se a janela não abrir automaticamente, 
+              <button onClick={() => window.open(CHAT_URL, '_blank')} className={styles.linkButton}>
+                clique aqui
+              </button>
+            </p>
           </div>
         )}
-        <iframe
-          src={CHAT_URL}
-          className={styles.chatIframe}
-          title="Assistente VoluntaRe"
-          allow="microphone; clipboard-read; clipboard-write"
-          onLoad={() => setIframeLoading(false)}
-        />
-      </div>
 
-      {/* Informações */}
-      <div className={styles.info}>
-        <p>
-          <i className="fas fa-info-circle"></i>
-          O assistente pode ajudar você a encontrar oportunidades de voluntariado baseadas nas suas habilidades.
-          Diga algo como: "Encontre oportunidades para mim"
-        </p>
+        <button 
+          onClick={() => router.back()} 
+          className={styles.backButton}
+        >
+          <i className="fas fa-arrow-left"></i>
+          Voltar para o dashboard
+        </button>
       </div>
     </div>
   );
