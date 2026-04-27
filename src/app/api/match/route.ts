@@ -217,7 +217,7 @@ function calculateDetailedScore(userSkills: string[], opportunity: any, index: n
   const oppDescription = (opportunity.description || '').toLowerCase();
   const oppTheme = (opportunity.theme || '').toLowerCase();
   
-  let totalScore = 30; // Score base mínimo
+  let totalScore = 50; // Score base mínimo
   
   // Verificar cada skill do usuário
   for (const skill of userSkills) {
@@ -248,11 +248,11 @@ function calculateDetailedScore(userSkills: string[], opportunity: any, index: n
   }
   
   // 🔥 VARIAÇÃO BASEADA NO ÍNDICE PARA DIVERSIDADE 🔥
-  const variation = (index * 13) % 30; // 0 a 29 de variação
+  const variation = (index * 13) % 35; // 0 a 29 de variação
   totalScore += variation;
   
   // Garantir que o score esteja entre 25 e 95
-  let finalScore = Math.min(95, Math.max(25, totalScore));
+  let finalScore = Math.min(90, Math.max(45, totalScore));
   
   return Math.floor(finalScore);
 }
