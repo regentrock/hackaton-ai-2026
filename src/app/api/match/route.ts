@@ -362,7 +362,7 @@ async function callWatsonX(prompt: string): Promise<string> {
         top_k: 50,
         repetition_penalty: 1.1
       },
-      model_id: 'meta-llama/llama-3-2-3b-instruct',
+      model_id: 'ibm/granite-3-8b-instruct',
       project_id: projectId
     })
   });
