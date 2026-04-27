@@ -26,6 +26,75 @@
   border: none !important;
 }
 
+/* Adicione estas classes */
+.loadingOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  z-index: 10;
+}
+
+.spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid #e2e8f0;
+  border-top-color: var(--color-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.errorOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  z-index: 10;
+  text-align: center;
+  padding: 1rem;
+}
+
+.errorOverlay i {
+  font-size: 2rem;
+  color: #ef4444;
+}
+
+.errorOverlay p {
+  font-size: 0.875rem;
+  color: #6b7280;
+}
+
+.errorOverlay button {
+  padding: 0.5rem 1rem;
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.chatContainer {
+  position: relative;
+}
+
 /* Responsivo para tablets */
 @media (max-width: 768px) {
   .chatContainer {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/src/contexts/AuthContext';
 import styles from './OrchestrateChat.module.css';
 
@@ -19,41 +19,8 @@ interface OrchestrateChatProps {
 export default function OrchestrateChat({ agentId, orchestrationId }: OrchestrateChatProps) {
   const { user } = useAuth();
   const chatInitialized = useRef(false);
-
-  // Função para obter o token via API
-  const getAuthToken = async (): Promise<string | null> => {
-    try {
-      // Tenta pegar do cookie
-      const cookies = document.cookie.split(';');
-      const authCookie = cookies.find(c => c.trim().startsWith('auth_token='));
-      if (authCookie) {
-        const token = authCookie.split('=')[1];
-        console.log('📌 Token obtido do cookie:', token.substring(0, 20) + '...');
-        return token;
-      }
-      
-      // Se não tiver no cookie, tenta via fetch
-      const res = await fetch('/api/auth/me', {
-        credentials: 'include',
-      });
-      
-      if (res.ok) {
-        // O token já está no cookie, então deve funcionar
-        const newCookies = document.cookie.split(';');
-        const newAuthCookie = newCookies.find(c => c.trim().startsWith('auth_token='));
-        if (newAuthCookie) {
-          const token = newAuthCookie.split('=')[1];
-          console.log('📌 Token obtido via API');
-          return token;
-        }
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('❌ Erro ao obter token:', error);
-      return null;
-    }
-  };
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (chatInitialized.current) return;
@@ -61,48 +28,60 @@ export default function OrchestrateChat({ agentId, orchestrationId }: Orchestrat
     
     chatInitialized.current = true;
 
-    // Inicializar o chat
     const initChat = async () => {
-      const authToken = await getAuthToken();
-      
-      console.log('🎯 Inicializando chat do Orchestrate...');
-      console.log('👤 Usuário:', user.name);
-      console.log('🔑 Token presente:', !!authToken);
-
-      window.wxOConfiguration = {
-        orchestrationID: orchestrationId,
-        hostURL: "https://dl.watson-orchestrate.ibm.com",
-        rootElementID: "orchestrate-chat-root",
-        chatOptions: {
-          agentId: agentId,
-          // 🔥 Passar o token JWT
-          ...(authToken && { authToken: authToken }),
-          userContext: {
-            userId: user.id,
-            userName: user.name,
-            userEmail: user.email,
-            userSkills: user.skills || [],
-            userLocation: user.location || '',
-            userDescription: user.description || '',
-            userAvailability: user.availability || ''
-          },
-          initialMessage: `Olá ${user.name}! 👋\n\nSou o assistente de voluntariado da VoluntaRe. Com base nas suas habilidades (${user.skills?.join(', ') || 'nenhuma cadastrada ainda'}), posso ajudar você a encontrar oportunidades de voluntariado ideais para o seu perfil.\n\nO que você gostaria de fazer hoje?`
+      try {
+        setLoading(true);
+        
+        // Obter configuração do Orchestrate via proxy
+        const proxyRes = await fetch('/api/orchestrate/proxy');
+        const config = await proxyRes.json();
+        
+        if (!config.token) {
+          throw new Error('Não foi possível obter token de autenticação');
         }
-      };
 
-      const script = document.createElement('script');
-      script.src = `${window.wxOConfiguration.hostURL}/wxochat/wxoLoader.js?embed=true`;
-      script.async = true;
-      script.onload = () => {
-        if (window.wxoLoader) {
-          window.wxoLoader.init();
-          console.log('✅ Chat inicializado com sucesso');
-        }
-      };
-      script.onerror = () => {
-        console.error('❌ Erro ao carregar o chat do Orchestrate');
-      };
-      document.head.appendChild(script);
+        console.log('🎯 Inicializando chat do Orchestrate com token IBM...');
+
+        window.wxOConfiguration = {
+          orchestrationID: orchestrationId,
+          hostURL: "https://dl.watson-orchestrate.ibm.com",
+          rootElementID: "orchestrate-chat-root",
+          chatOptions: {
+            agentId: agentId,
+            // 🔥 Usar o token IAM da IBM
+            authToken: config.token,
+            userContext: {
+              userId: user.id,
+              userName: user.name,
+              userEmail: user.email,
+              userSkills: user.skills || [],
+              userLocation: user.location || '',
+            },
+            initialMessage: `Olá ${user.name}! 👋\n\nSou o assistente de voluntariado da VoluntaRe. Com base nas suas habilidades (${user.skills?.join(', ') || 'nenhuma cadastrada ainda'}), posso ajudar você a encontrar oportunidades de voluntariado ideais para o seu perfil.\n\nO que você gostaria de fazer hoje?`
+          }
+        };
+
+        const script = document.createElement('script');
+        script.src = `${window.wxOConfiguration.hostURL}/wxochat/wxoLoader.js?embed=true`;
+        script.async = true;
+        script.onload = () => {
+          if (window.wxoLoader) {
+            window.wxoLoader.init();
+            console.log('✅ Chat do Orchestrate inicializado com sucesso');
+            setLoading(false);
+          }
+        };
+        script.onerror = () => {
+          setError('Erro ao carregar o chat');
+          setLoading(false);
+        };
+        document.head.appendChild(script);
+
+      } catch (err: any) {
+        console.error('❌ Erro ao inicializar chat:', err);
+        setError(err.message);
+        setLoading(false);
+      }
     };
 
     initChat();
@@ -118,6 +97,19 @@ export default function OrchestrateChat({ agentId, orchestrationId }: Orchestrat
 
   return (
     <div className={styles.chatContainer}>
+      {loading && (
+        <div className={styles.loadingOverlay}>
+          <div className={styles.spinner}></div>
+          <p>Carregando assistente...</p>
+        </div>
+      )}
+      {error && (
+        <div className={styles.errorOverlay}>
+          <i className="fas fa-exclamation-circle"></i>
+          <p>Erro ao carregar chat</p>
+          <button onClick={() => window.location.reload()}>Tentar novamente</button>
+        </div>
+      )}
       <div id="orchestrate-chat-root" className={styles.chatRoot}></div>
     </div>
   );
