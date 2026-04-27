@@ -211,7 +211,6 @@ function calculateMatchesWithScores(user: any, opportunities: any[]): MatchResul
   return results;
 }
 
-// 🔥 CÁLCULO DE SCORE DETALHADO E VARIADO 🔥
 function calculateDetailedScore(userSkills: string[], opportunity: any, index: number): number {
   const oppTitle = (opportunity.title || '').toLowerCase();
   const oppDescription = (opportunity.description || '').toLowerCase();
@@ -247,7 +246,6 @@ function calculateDetailedScore(userSkills: string[], opportunity: any, index: n
     }
   }
   
-  // 🔥 VARIAÇÃO BASEADA NO ÍNDICE PARA DIVERSIDADE 🔥
   const variation = (index * 13) % 35; // 0 a 29 de variação
   totalScore += variation;
   
@@ -295,7 +293,7 @@ function generateReasoningText(score: number, matchedSkills: string[], title: st
   const shortTitle = title.length > 45 ? title.substring(0, 45) + '...' : title;
   
   if (score >= 75) {
-    return `🏆 Excelente! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são muito relevantes para "${shortTitle}".`;
+    return `Excelente! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são muito relevantes para "${shortTitle}".`;
   } else if (score >= 60) {
     if (matchedSkills.length > 0) {
       return `Ótima compatibilidade! Sua experiência em ${matchedSkills.slice(0, 2).join(', ')} será muito útil para este projeto.`;
@@ -311,15 +309,15 @@ function generateReasoningText(score: number, matchedSkills: string[], title: st
 // Gerar texto de recomendação
 function generateRecommendationText(score: number, matchedSkills: string[]): string {
   if (score >= 75) {
-    return `RECOMENDAÇÃO FORTE: Candidate-se! Excelente alinhamento com seu perfil.`;
+    return `Recomendação forte: Candidate-se! Excelente alinhamento com seu perfil.`;
   } else if (score >= 60) {
     if (matchedSkills.length > 0) {
-      return `RECOMENDAÇÃO: Considere se candidatar. Suas habilidades são valiosas para esta oportunidade.`;
+      return `Recomendação: Considere se candidatar. Suas habilidades são valiosas para esta oportunidade.`;
     }
-    return `RECOMENDAÇÃO: Boa oportunidade para aplicar seus conhecimentos.`;
+    return `Recomendação: Boa oportunidade para aplicar seus conhecimentos.`;
   } else if (score >= 45) {
-    return `RECOMENDAÇÃO: Vale a pena explorar esta oportunidade.`;
+    return `Recomendação: Vale a pena explorar esta oportunidade.`;
   } else {
-    return `RECOMENDAÇÃO: Ótima oportunidade para aprendizado e crescimento.`;
+    return `Recomendação: Ótima oportunidade para aprendizado e crescimento.`;
   }
 }
