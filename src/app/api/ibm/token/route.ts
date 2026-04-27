@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export async function GET() {
   try {
@@ -14,6 +14,7 @@ export async function GET() {
       return NextResponse.json({ error: 'Failed to get token' }, { status: 500 });
     }
     
+    // Criar cookie com o token para o chat usar
     const res = NextResponse.json({ success: true, token: data.access_token });
     res.cookies.set('ibm_token', data.access_token, {
       httpOnly: true,
@@ -24,7 +25,6 @@ export async function GET() {
     
     return res;
   } catch (error) {
-    console.error('Erro IBM token:', error);
     return NextResponse.json({ error: 'Failed to get token' }, { status: 500 });
   }
 }

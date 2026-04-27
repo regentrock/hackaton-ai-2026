@@ -11,8 +11,8 @@ declare global {
   }
 }
 
-const AGENT_ID = process.env.NEXT_PUBLIC_AGENT_ID || "ae187a51-172a-4288-b5fe-fefae23ab71f";
-const ORCHESTRATION_ID = process.env.NEXT_PUBLIC_ORCHESTRATION_ID || "20260423-1400-2730-305f-ec6ede7a1a7a_20260423-1400-4202-20dc-0f3e2d98827b";
+const AGENT_ID = "ae187a51-172a-4288-b5fe-fefae23ab71f";
+const ORCHESTRATION_ID = "20260423-1400-2730-305f-ec6ede7a1a7a_20260423-1400-4202-20dc-0f3e2d98827b";
 
 export default function OrchestrateChat({ onClose }: { onClose?: () => void }) {
   const { user } = useAuth();
@@ -27,22 +27,26 @@ export default function OrchestrateChat({ onClose }: { onClose?: () => void }) {
 
     const loadChat = async () => {
       try {
-        // Obter token IBM usando sua API Key
+        setIsLoading(true);
+        
+        // Obter token IBM
         const tokenRes = await fetch('/api/ibm/token');
         const tokenData = await tokenRes.json();
         
-        if (!tokenData.success) {
-          throw new Error('Não foi possível obter autenticação IBM');
+        if (!tokenData.token) {
+          throw new Error('Não foi possível obter token de autenticação IBM');
         }
+        
+        console.log('✅ Token IBM obtido com sucesso');
 
         // Configurar o Orchestrate com o token
         window.wxOConfiguration = {
           orchestrationID: ORCHESTRATION_ID,
           hostURL: "https://dl.watson-orchestrate.ibm.com",
-          rootElementID: containerRef.current?.id,
+          rootElementID: containerRef.current?.id || "orchestrate-chat-root",
           chatOptions: {
             agentId: AGENT_ID,
-            authToken: tokenData.token,
+            authToken: tokenData.token,  // 🔥 TOKEN DE AUTENTICAÇÃO
             userContext: {
               userId: user.id,
               userName: user.name,
@@ -58,10 +62,14 @@ export default function OrchestrateChat({ onClose }: { onClose?: () => void }) {
         script.onload = () => {
           if (window.wxoLoader) {
             window.wxoLoader.init();
+            console.log('✅ Orchestrate Chat inicializado com autenticação');
             setIsLoading(false);
           }
         };
-        script.onerror = () => setError('Erro ao carregar o assistente');
+        script.onerror = () => {
+          setError('Erro ao carregar o assistente');
+          setIsLoading(false);
+        };
         document.head.appendChild(script);
         
       } catch (err) {
@@ -80,10 +88,10 @@ export default function OrchestrateChat({ onClose }: { onClose?: () => void }) {
     <div className={styles.chatContainer}>
       <div className={styles.chatHeader}>
         <div className={styles.chatHeaderInfo}>
-          <i className="fas fa-robot"></i>
+          <i className="fab fa-ibm"></i>
           <div>
-            <h3>Assistente VoluntaRe</h3>
-            <p>Baseado nas suas habilidades</p>
+            <h3>Assistente watsonx</h3>
+            <p>Alimentado por IBM</p>
           </div>
         </div>
         <button onClick={onClose} className={styles.closeButton}>
@@ -94,7 +102,7 @@ export default function OrchestrateChat({ onClose }: { onClose?: () => void }) {
       {isLoading && (
         <div className={styles.loadingOverlay}>
           <div className={styles.spinner}></div>
-          <p>Autenticando com IBM Cloud...</p>
+          <p>Conectando ao IBM watsonx...</p>
         </div>
       )}
       {error && (
