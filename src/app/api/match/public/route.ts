@@ -7,125 +7,137 @@ export async function GET(request: NextRequest) {
   
   console.log('========== [INÍCIO] Requisição para área:', area);
   
-  // --- 1. Validar a chave da API ---
+  // 1. Verificar API Key
   const apiKey = process.env.GLOBAL_GIVING_API_KEY;
+  console.log('[1] API Key presente?', apiKey ? 'SIM' : 'NÃO');
+  console.log('[1] API Key (primeiros 8 chars):', apiKey ? apiKey.substring(0, 8) + '...' : 'N/A');
+  
   if (!apiKey) {
-    console.error('[ERRO] Chave GLOBAL_GIVING_API_KEY não configurada.');
+    console.error('[ERRO] GLOBAL_GIVING_API_KEY não configurada');
     return NextResponse.json({
       success: false,
       opportunities: [],
       total: 0,
-      error: 'Chave de API da GlobalGiving não configurada no servidor.'
-    }, { status: 500 });
-  }
-  console.log('[INFO] Chave da API encontrada.');
-
-  // --- 2. Construir e chamar a URL da GlobalGiving ---
-  // Usando o endpoint de projetos do Brasil, retornando menos dados por página para testes.
-  const globalGivingUrl = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}&page=1&per_page=20`;
-  console.log('[INFO] Chamando URL:', globalGivingUrl.replace(apiKey, '***'));
-
-  let projectsData = null;
-  try {
-    const response = await fetch(globalGivingUrl, {
-      headers: { 'Accept': 'application/json' },
+      error: 'API Key não configurada'
     });
-    console.log(`[INFO] Status da resposta da GlobalGiving: ${response.status}`);
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    projectsData = await response.json();
-    console.log('[INFO] Dados JSON recebidos da GlobalGiving com sucesso.');
+  }
+  
+  // 2. Construir URL da GlobalGiving
+  const globalGivingUrl = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}&page=1&per_page=20`;
+  console.log('[2] URL chamada (com API Key oculta):', globalGivingUrl.replace(apiKey, '***'));
+  
+  // 3. Fazer a requisição
+  let response;
+  try {
+    response = await fetch(globalGivingUrl, {
+      headers: { 'Accept': 'application/json' },
+      cache: 'no-store'
+    });
+    console.log('[3] Status da resposta:', response.status);
   } catch (fetchError: any) {
-    console.error('[ERRO] Falha na requisição à GlobalGiving:', fetchError.message);
+    console.error('[ERRO] Falha no fetch:', fetchError.message);
     return NextResponse.json({
       success: false,
       opportunities: [],
       total: 0,
-      error: `Falha ao se comunicar com a GlobalGiving: ${fetchError.message}`
-    }, { status: 502 });
+      error: `Erro ao chamar GlobalGiving: ${fetchError.message}`
+    });
   }
-
-  // --- 3. Extrair o array de projetos da resposta ---
-  // A estrutura da API é: { projects: { project: [ ... ] } }
-  const projects = projectsData?.projects?.project;
+  
+  if (!response.ok) {
+    console.error('[ERRO] Resposta não OK:', response.status, response.statusText);
+    return NextResponse.json({
+      success: false,
+      opportunities: [],
+      total: 0,
+      error: `GlobalGiving respondeu com status ${response.status}`
+    });
+  }
+  
+  // 4. Parsear resposta
+  let data;
+  try {
+    data = await response.json();
+    console.log('[4] Dados recebidos com sucesso');
+  } catch (parseError: any) {
+    console.error('[ERRO] Falha ao parsear JSON:', parseError.message);
+    return NextResponse.json({
+      success: false,
+      opportunities: [],
+      total: 0,
+      error: 'Erro ao processar resposta da GlobalGiving'
+    });
+  }
+  
+  // 5. Extrair projetos
+  const projects = data?.projects?.project;
+  console.log('[5] Projetos encontrados:', projects ? projects.length : 0);
   
   if (!projects || !Array.isArray(projects)) {
-    console.error('[ERRO] Formato de resposta inesperado da GlobalGiving. Estrutura "projects.project" não encontrada.');
-    console.log('[DEBUG] Resposta amostra (primeiros 200 chars):', JSON.stringify(projectsData).substring(0, 200));
+    console.error('[ERRO] Estrutura inesperada. keys:', Object.keys(data || {}));
     return NextResponse.json({
       success: false,
       opportunities: [],
       total: 0,
-      error: 'Formato de dados inesperado recebido da GlobalGiving.'
-    }, { status: 502 });
+      error: 'Formato de resposta inesperado da GlobalGiving'
+    });
   }
   
-  console.log(`[INFO] Recebidos ${projects.length} projetos da GlobalGiving.`);
-
-  // --- 4. Mapear para o formato que o Orchestrate espera ---
   if (projects.length === 0) {
-    console.warn('[INFO] Nenhum projeto ativo encontrado para o Brasil.');
+    console.warn('[AVISO] Nenhum projeto ativo encontrado para o Brasil');
     return NextResponse.json({
       success: true,
       opportunities: [],
       total: 0,
       area: area,
-      message: 'Nenhum projeto ativo encontrado na GlobalGiving para o Brasil no momento.'
+      message: 'Nenhum projeto ativo no momento'
     });
   }
-
-  const rawOpportunities = projects.map((project: any) => ({
-    id: project.id,
-    title: project.title || 'Projeto sem título',
-    organization: project.organization?.name || 'Organização não informada',
-    location: `${project.location?.city || 'Local não informado'}, ${project.location?.country || 'BR'}`,
-    description: (project.summary || project.description || '').substring(0, 400),
-    theme: project.themeName || 'Tema não especificado',
-    projectLink: project.projectLink,
-    // Campos originais para debug
-    _rawTheme: project.themeName
+  
+  // 6. Mapear oportunidades
+  const allOpportunities = projects.map((p: any) => ({
+    title: p.title || 'Projeto sem título',
+    organization: p.organization?.name || 'ONG não informada',
+    location: `${p.location?.city || 'Local não informado'}, ${p.location?.country || 'BR'}`,
+    description: (p.summary || p.description || '').substring(0, 300),
+    theme: p.themeName || 'Tema não informado',
+    projectLink: p.projectLink
   }));
-
-  // --- 5. Filtrar pela área, se fornecida ---
-  let finalOpportunities = rawOpportunities;
+  
+  console.log('[6] Oportunidades mapeadas:', allOpportunities.length);
+  console.log('[6] Primeiro título:', allOpportunities[0]?.title);
+  
+  // 7. Filtrar por área
+  let filteredOpportunities = allOpportunities;
   if (area) {
-    const searchTerm = area.toLowerCase();
-    finalOpportunities = rawOpportunities.filter(opp => {
-      // Busca em português e inglês no título, tema e descrição
-      const titleMatch = opp.title?.toLowerCase().includes(searchTerm);
-      const themeMatch = opp.theme?.toLowerCase().includes(searchTerm);
-      const descMatch = opp.description?.toLowerCase().includes(searchTerm);
-      // Log para entender o que está sendo filtrado (útil para debug)
-      if (titleMatch || themeMatch || descMatch) {
-        console.log(`[DEBUG] Match para "${area}": ${opp.title} (Tema: ${opp.theme})`);
-      }
-      return titleMatch || themeMatch || descMatch;
+    const areaLower = area.toLowerCase();
+    filteredOpportunities = allOpportunities.filter(opp => {
+      const theme = (opp.theme || '').toLowerCase();
+      const title = (opp.title || '').toLowerCase();
+      return theme.includes(areaLower) || title.includes(areaLower);
     });
-    console.log(`[INFO] Filtro por "${area}" aplicado. Resultados: ${finalOpportunities.length} de ${rawOpportunities.length}`);
-  } else {
-    console.log('[INFO] Nenhum filtro de área aplicado.');
+    console.log('[7] Filtrados por área:', filteredOpportunities.length);
   }
-
-  // --- 6. Formatar a resposta FINAL para o Orchestrate (sem mocks, sem fallbacks)---
-  const formattedResults = finalOpportunities.slice(0, 10).map(opp => ({
+  
+  // 8. Formatar resposta
+  const results = filteredOpportunities.slice(0, 10).map(opp => ({
     title: opp.title,
     organization: opp.organization,
     location: opp.location,
-    matchScore: 75, // Score padrão sem dados do usuário. Ajuste se tiver perfil.
-    reasoning: `Oportunidade baseada no seu interesse por ${area || 'voluntariado'}. (Tema do projeto: ${opp.theme})`,
-    matchedSkills: ['Comunicação', 'Trabalho em equipe'], // Placeholder sem perfil real
+    matchScore: 75,
+    reasoning: `Oportunidade na área de ${opp.theme}`,
+    matchedSkills: ['Comunicação', 'Trabalho em equipe'],
     theme: opp.theme,
     projectLink: opp.projectLink
   }));
-
-  console.log(`========== [FIM] Retornando ${formattedResults.length} oportunidades. ==========`);
+  
+  console.log('[8] FINAL - Retornando', results.length, 'oportunidades');
+  console.log('========== [FIM] ==========');
   
   return NextResponse.json({
     success: true,
-    opportunities: formattedResults,
-    total: formattedResults.length,
+    opportunities: results,
+    total: results.length,
     area: area
   });
 }
