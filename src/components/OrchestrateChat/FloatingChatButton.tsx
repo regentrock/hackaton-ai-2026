@@ -5,14 +5,15 @@ import { useAuth } from '@/src/contexts/AuthContext';
 import dynamic from 'next/dynamic';
 import styles from './FloatingChatButton.module.css';
 
-// Carregar o chat dinamicamente
+// Carregar o chat dinamicamente para não afetar o carregamento inicial
 const OrchestrateChat = dynamic(
   () => import('./OrchestrateChat'),
   { ssr: false }
 );
 
-const AGENT_ID = "ae187a51-172a-4288-b5fe-fefae23ab71f";
+// Seus IDs (do código que você forneceu)
 const ORCHESTRATION_ID = "20260423-1400-2730-305f-ec6ede7a1a7a_20260423-1400-4202-20dc-0f3e2d98827b";
+const AGENT_ID = "ae187a51-172a-4288-b5fe-fefae23ab71f";
 
 export default function FloatingChatButton() {
   const [isOpen, setIsOpen] = useState(false);
@@ -22,7 +23,6 @@ export default function FloatingChatButton() {
 
   return (
     <>
-      {/* Botão flutuante */}
       <button 
         className={styles.chatButton}
         onClick={() => setIsOpen(!isOpen)}
@@ -31,13 +31,12 @@ export default function FloatingChatButton() {
         <i className="fas fa-comment-dots"></i>
       </button>
 
-      {/* Chat (aparece quando aberto) */}
       {isOpen && (
         <>
           <div className={styles.overlay} onClick={() => setIsOpen(false)} />
           <OrchestrateChat 
-            agentId={AGENT_ID}
             orchestrationId={ORCHESTRATION_ID}
+            agentId={AGENT_ID}
           />
         </>
       )}

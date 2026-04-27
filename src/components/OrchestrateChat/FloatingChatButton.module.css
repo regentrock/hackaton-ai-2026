@@ -5,11 +5,11 @@
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background: var(--color-primary, #b02629);
+  background: linear-gradient(135deg, var(--color-primary, #b02629), var(--color-primary-dark, #8d1206));
   color: white;
   border: none;
   cursor: pointer;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 6px 20px rgba(176, 38, 41, 0.4);
   transition: all 0.2s ease;
   z-index: 1000;
   display: flex;
@@ -20,7 +20,7 @@
 
 .chatButton:hover {
   transform: scale(1.05);
-  background: var(--color-primary-dark, #8d1206);
+  box-shadow: 0 8px 25px rgba(176, 38, 41, 0.5);
 }
 
 .overlay {
@@ -29,17 +29,17 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.4);
   z-index: 1000;
+  backdrop-filter: blur(2px);
 }
 
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
+@media (max-width: 640px) {
+  .chatButton {
+    width: 52px;
+    height: 52px;
+    bottom: 20px;
+    right: 20px;
+    font-size: 1.3rem;
   }
 }
