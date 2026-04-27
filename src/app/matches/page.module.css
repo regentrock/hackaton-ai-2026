@@ -1026,6 +1026,10 @@
   .header {
     flex-direction: column;
   }
+
+  .container{
+    width: 95vw !important;
+  }
   
   .headerRight {
     width: 100%;
@@ -1044,6 +1048,7 @@
 @media (max-width: 768px) {
   .container {
     padding: 1rem 1rem 2rem;
+    width: 100vw !important;
   }
 
   .horizontalScrollContainer{

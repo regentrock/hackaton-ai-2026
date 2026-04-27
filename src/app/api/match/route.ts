@@ -1,4 +1,4 @@
-// app/api/match/route.ts
+// app/api/match/route.ts - VERSÃO COM MATCHING INTELIGENTE
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/src/lib/auth/authUtils';
 
@@ -19,13 +19,13 @@ interface MatchResult {
   projectLink?: string;
 }
 
-// Cache reduzido para 10 minutos (em vez de 1 hora)
+// Cache para projetos (10 minutos)
 let cachedProjects: any[] = [];
 let cacheTimestamp = 0;
-const CACHE_DURATION = 10 * 60 * 1000; // 10 minutos
+const CACHE_DURATION = 10 * 60 * 1000;
 
-// Cache para cada usuário (para evitar ver sempre as mesmas vagas)
-let userLastSeenCache: Map<string, { timestamp: number, seenIds: Set<string> }> = new Map();
+// Cache por usuário para evitar repetição
+let userSessionCache: Map<string, { timestamp: number, recentIds: string[] }> = new Map();
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
-    // 2. Buscar perfil do usuário
+    // 2. Buscar perfil completo do usuário
     const { prisma } = await import('@/src/lib/prisma');
     
     const user = await prisma.volunteer.findUnique({
@@ -73,11 +73,12 @@ export async function GET(request: NextRequest) {
     }
 
     console.log('👤 Usuário:', user.name);
-    console.log('🎯 Skills do usuário:', user.skills);
+    console.log('🎯 Skills:', user.skills);
     console.log('📍 Localização:', user.location);
-    console.log('📝 Sobre o usuário:', user.description?.substring(0, 100) || 'Não informado');
+    console.log('📝 Sobre mim:', user.description?.substring(0, 200) || 'Não informado');
+    console.log('⏰ Disponibilidade:', user.availability || 'Não informado');
 
-    // 3. Buscar oportunidades (com cache reduzido)
+    // 3. Buscar oportunidades
     let opportunities = await fetchOpportunitiesWithCache();
     
     if (opportunities.length === 0) {
@@ -88,83 +89,34 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    console.log(`📦 Total de oportunidades disponíveis: ${opportunities.length}`);
+    console.log(`📦 ${opportunities.length} oportunidades disponíveis`);
 
-    // 4. Aplicar maior escopo - EMBARALHAR as oportunidades para variedade
-    opportunities = shuffleArray([...opportunities]);
+    // 4. Calcular matches com algoritmo inteligente
+    const matches = calculateIntelligentMatches(user, opportunities);
 
-    // 5. Acompanhar o que o usuário já viu recentemente (evitar repetição)
-    const userCacheKey = user.id;
-    const now = Date.now();
-    const userCache = userLastSeenCache.get(userCacheKey);
-    
-    // Limpar cache antigo (mais de 1 hora)
-    if (userCache && (now - userCache.timestamp) > 60 * 60 * 1000) {
-      userLastSeenCache.delete(userCacheKey);
-    }
-    
-    const seenIds = userCache?.seenIds || new Set<string>();
-    
-    // Filtrar oportunidades que o usuário já viu recentemente (opcional)
-    // Permitir até 30% de repetição para não limitar demais
-    let filteredOpportunities = opportunities;
-    if (seenIds.size > 0 && seenIds.size < opportunities.length * 0.7) {
-      const unseen = opportunities.filter(opp => !seenIds.has(opp.id));
-      if (unseen.length > opportunities.length * 0.3) {
-        filteredOpportunities = unseen;
-        console.log(`🎲 Filtrando ${seenIds.size} oportunidades já vistas. Restam: ${filteredOpportunities.length}`);
-      }
-    }
-    
-    // 6. Calcular matches com todos os dados do usuário
-    let matches = calculateMatchesWithAllUserData(user, filteredOpportunities);
-
-    // 7. Adicionar variação aleatória nos scores para não ser sempre igual
-    matches = matches.map(match => ({
-      ...match,
-      matchScore: addRandomVariation(match.matchScore, match.id)
-    }));
-
-    // 8. Ordenar por score (maior primeiro)
+    // 5. Ordenar por score
     matches.sort((a, b) => b.matchScore - a.matchScore);
+
+    // 6. Aplicar variação para evitar sempre os mesmos resultados
+    const shuffledMatches = addUserVariation(matches, user.id);
+
+    // 7. Selecionar top matches (aumentado para 50)
+    const topMatches = shuffledMatches.slice(0, 50);
     
-    // 9. Selecionar mais vagas para análise (aumentar escopo)
-    const MAX_MATCHES = 50; // Aumentado de 30 para 50
-    const selectedMatches = matches.slice(0, MAX_MATCHES);
-    
-    // 10. Atualizar o cache de IDs vistos pelo usuário
-    const newSeenIds = new Set(seenIds);
-    selectedMatches.slice(0, 15).forEach(match => {
-      newSeenIds.add(match.id);
-    });
-    
-    // Manter apenas os últimos 50 IDs vistos
-    const idsArray = Array.from(newSeenIds);
-    if (idsArray.length > 50) {
-      const trimmedIds = new Set(idsArray.slice(-50));
-      userLastSeenCache.set(userCacheKey, { timestamp: now, seenIds: trimmedIds });
-    } else {
-      userLastSeenCache.set(userCacheKey, { timestamp: now, seenIds: newSeenIds });
-    }
-    
+    // 8. Atualizar cache do usuário
+    updateUserCache(user.id, topMatches.slice(0, 20));
+
     const executionTime = Date.now() - startTime;
-    console.log(`✨ API finalizada em ${executionTime}ms`);
-    console.log(`🎯 Retornando ${selectedMatches.length} matches (de ${matches.length} calculados)`);
-    
-    // Log dos primeiros scores
-    console.log('📊 Top scores gerados:');
-    selectedMatches.slice(0, 5).forEach((m, i) => {
-      console.log(`  ${i + 1}. ${m.title.substring(0, 40)}... - ${m.matchScore}%`);
-    });
+    console.log(`✅ API finalizada em ${executionTime}ms`);
+    console.log(`🎯 Retornando ${topMatches.length} matches`);
 
     return NextResponse.json({
       success: true,
-      matches: selectedMatches,
-      total: matches.length,
+      matches: topMatches,
+      total: topMatches.length,
       userSkills: user.skills || [],
       executionTimeMs: executionTime,
-      usingAI: true,
-      refreshed: true // Indicar que é uma análise fresca
+      usingAI: true
     });
 
   } catch (error: any) {
@@ -176,34 +128,11 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Função para embaralhar array (Fisher-Yates)
-function shuffleArray<T>(array: T[]): T[] {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]];
-  }
-  return array;
-}
-
-// Função para adicionar variação aleatória no score
-function addRandomVariation(score: number, id: string): number {
-  // Usar o ID para gerar uma variação consistente mas diferente por item
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) {
-    hash = ((hash << 5) - hash) + id.charCodeAt(i);
-    hash |= 0;
-  }
-  const variation = (Math.abs(hash) % 15) - 7; // Entre -7 e +7
-  let newScore = score + variation;
-  return Math.min(95, Math.max(35, newScore));
-}
-
 async function fetchOpportunitiesWithCache(): Promise<any[]> {
   const now = Date.now();
   
-  // Cache reduzido para 10 minutos
   if (cachedProjects.length > 0 && (now - cacheTimestamp) < CACHE_DURATION) {
-    console.log(`📦 Usando cache de projetos (${Math.round((now - cacheTimestamp) / 1000)}s atrás)`);
+    console.log(`📦 Cache ativo (${Math.round((now - cacheTimestamp) / 1000)}s)`);
     return cachedProjects;
   }
   
@@ -215,57 +144,40 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
   }
 
   try {
-    // Aumentar escopo: buscar mais páginas de projetos
     const allProjects: any[] = [];
-    const pageSize = 20;
-    let currentPage = 1;
-    let hasMore = true;
     
-    console.log('🌍 Buscando oportunidades da GlobalGiving...');
-    
-    while (hasMore && currentPage <= 5) { // Buscar até 5 páginas (100 projetos)
-      const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}&page=${currentPage}`;
+    // Buscar múltiplas páginas
+    for (let page = 1; page <= 4; page++) {
+      const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}&page=${page}`;
       
-      try {
-        const response = await fetch(url, {
-          headers: { 'Accept': 'application/json' },
-          cache: 'no-store'
-        });
+      const response = await fetch(url, {
+        headers: { 'Accept': 'application/json' },
+        cache: 'no-store'
+      });
 
-        if (!response.ok) {
-          console.log(`⚠️ Página ${currentPage} retornou erro ${response.status}`);
-          break;
-        }
+      if (!response.ok) break;
 
-        const data = await response.json();
-        const projects = data.projects?.project || [];
-        
-        if (projects.length === 0) {
-          hasMore = false;
-          break;
-        }
-        
-        allProjects.push(...projects);
-        console.log(`📄 Página ${currentPage}: +${projects.length} projetos (total: ${allProjects.length})`);
-        
-        currentPage++;
-        
-      } catch (err) {
-        console.error(`❌ Erro na página ${currentPage}:`, err);
-        break;
-      }
+      const data = await response.json();
+      const projects = data.projects?.project || [];
+      
+      if (projects.length === 0) break;
+      
+      allProjects.push(...projects);
+      console.log(`📄 Página ${page}: +${projects.length} projetos`);
     }
     
-    console.log(`📡 GlobalGiving: ${allProjects.length} projetos brutos carregados`);
+    console.log(`📡 Total: ${allProjects.length} projetos carregados`);
 
     cachedProjects = allProjects.map((project: any) => ({
       id: project.id,
       title: project.title || 'Projeto de Voluntariado',
       organization: project.organization?.name || 'GlobalGiving Partner',
       location: `${project.location?.city || 'Brasil'}, ${project.location?.country || 'BR'}`,
-      description: project.summary || project.description || '',
+      description: (project.summary || project.description || '').substring(0, 500),
       theme: project.themeName || 'Voluntariado',
-      projectLink: project.projectLink
+      projectLink: project.projectLink,
+      // Extrair palavras-chave do título e descrição
+      keywords: extractKeywords(`${project.title} ${project.themeName || ''}`)
     }));
     
     cacheTimestamp = now;
@@ -278,38 +190,76 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
   }
 }
 
-// Função que calcula match usando TODOS os dados do usuário
-function calculateMatchesWithAllUserData(user: any, opportunities: any[]): MatchResult[] {
+// Extrair palavras-chave relevantes
+function extractKeywords(text: string): string[] {
+  const stopWords = ['the', 'a', 'an', 'and', 'or', 'of', 'to', 'for', 'in', 'on', 'at', 'with', 'by', 'from', 'up', 'down', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'all', 'any', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'that', 'then', 'these', 'those', 'through', 'until', 'unto', 'upon', 've', 'very', 'just', 'but', 'do', 'does', 'doing', 'did'];
+  
+  const words = text.toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 3 && !stopWords.includes(w));
+  
+  return [...new Set(words)].slice(0, 15);
+}
+
+// Algoritmo principal de matching inteligente
+function calculateIntelligentMatches(user: any, opportunities: any[]): MatchResult[] {
+  const results: MatchResult[] = [];
+  
+  // Preparar dados do usuário
   const userSkills = user.skills?.map((s: string) => s.toLowerCase()) || [];
   const userDescription = (user.description || '').toLowerCase();
   const userLocation = (user.location || '').toLowerCase();
   const userAvailability = (user.availability || '').toLowerCase();
   
-  console.log('📊 Dados do usuário para análise:');
-  console.log(`   - Skills: ${userSkills.length} habilidades`);
-  console.log(`   - Sobre mim: ${userDescription.length} caracteres`);
-  console.log(`   - Localização: "${userLocation}"`);
-  console.log(`   - Disponibilidade: "${userAvailability}"`);
+  // Extrair interesses do usuário a partir da descrição
+  const userInterests = extractInterestsFromText(userDescription);
+  const userKeywords = extractKeywords(userDescription);
   
-  const results: MatchResult[] = [];
-
-  for (let i = 0; i < opportunities.length; i++) {
-    const opp = opportunities[i];
+  console.log('🔍 Interesses detectados:', userInterests);
+  console.log('🔑 Palavras-chave do perfil:', userKeywords.slice(0, 10));
+  
+  // Categorias de voluntariado para matching semântico
+  const categoryKeywords: Record<string, string[]> = {
+    'educação': ['educação', 'ensino', 'escola', 'criança', 'estudante', 'alfabetização', 'professor', 'aprendizagem', 'didática', 'pedagogia', 'cursinho', 'aula', 'mentoria'],
+    'saúde': ['saúde', 'hospital', 'médico', 'enfermagem', 'paciente', 'bem-estar', 'doença', 'tratamento', 'cuidado', 'saúde mental', 'psicologia', 'bem estar'],
+    'meio ambiente': ['ambiente', 'ecologia', 'sustentabilidade', 'reciclagem', 'natureza', 'floresta', 'água', 'clima', 'resíduo', 'preservação', 'animais', 'fauna', 'flora'],
+    'social': ['social', 'comunidade', 'assistência', 'moradia', 'fome', 'pobreza', 'vulnerável', 'inclusão', 'direitos', 'cidadania', 'família', 'desigualdade'],
+    'crianças': ['criança', 'infantil', 'menor', 'adolescente', 'jovem', 'educação', 'brincar', 'desenvolvimento infantil'],
+    'idosos': ['idoso', 'terceira idade', 'envelhecimento', 'aposentado', 'melhor idade', 'geriátrico', 'cuidado de idosos'],
+    'animais': ['animal', 'pet', 'bicho', 'fauna', 'proteção animal', 'abrigo', 'resgate animal', 'veterinário', 'cão', 'gato'],
+    'tecnologia': ['tecnologia', 'programação', 'site', 'app', 'software', 'informática', 'digital', 'computador', 'internet', 'desenvolvimento', 'ti', 'sistema'],
+    'cultura': ['cultura', 'arte', 'música', 'teatro', 'dança', 'patrimônio', 'histórico', 'tradição', 'oficina cultural', 'evento cultural'],
+    'esportes': ['esporte', 'atividade física', 'futebol', 'prática esportiva', 'lazer', 'recreação', 'saúde', 'exercício'],
+    'emergência': ['emergência', 'desastre', 'enchente', 'incêndio', 'resgate', 'crise', 'urgência', 'ajuda humanitária', 'defesa civil']
+  };
+  
+  for (const opp of opportunities) {
+    // Calcular vários componentes do match
+    const skillScore = calculateSkillMatch(userSkills, opp);
+    const interestScore = calculateInterestMatch(userInterests, opp, categoryKeywords);
+    const keywordScore = calculateKeywordMatch(userKeywords, opp);
+    const locationScore = calculateLocationMatch(userLocation, opp.location);
+    const availabilityScore = calculateAvailabilityMatch(userAvailability, opp);
     
-    const matchScore = calculateFullScore({
-      userSkills,
-      userDescription,
-      userLocation,
-      userAvailability,
-      opportunity: opp,
-      index: i
-    });
+    // Peso diferenciado para cada componente
+    let totalScore = 0;
+    totalScore += skillScore * 0.35;        // 35% habilidades
+    totalScore += interestScore * 0.30;     // 30% interesses
+    totalScore += keywordScore * 0.20;      // 20% palavras-chave
+    totalScore += locationScore * 0.10;     // 10% localização
+    totalScore += availabilityScore * 0.05; // 5% disponibilidade
     
-    const matchedSkills = findMatchedSkillsFromUserData(userSkills, userDescription, opp);
+    // Garantir score entre 25 e 98
+    let finalScore = Math.min(98, Math.max(25, Math.round(totalScore)));
     
+    // Skills que deram match
+    const matchedSkills = findExactSkillMatches(userSkills, opp);
+    
+    // Determinar prioridade
     let priority: 'high' | 'medium' | 'low' = 'medium';
-    if (matchScore >= 70) priority = 'high';
-    else if (matchScore >= 45) priority = 'medium';
+    if (finalScore >= 70) priority = 'high';
+    else if (finalScore >= 45) priority = 'medium';
     else priority = 'low';
     
     results.push({
@@ -319,194 +269,242 @@ function calculateMatchesWithAllUserData(user: any, opportunities: any[]): Match
       location: opp.location,
       description: opp.description?.substring(0, 300),
       skills: [],
-      matchScore: matchScore,
+      matchScore: finalScore,
       matchedSkills: matchedSkills.slice(0, 4),
       missingSkills: [],
-      reasoning: generateReasoningTextWithContext(matchScore, matchedSkills, opp.title, user),
-      recommendation: generateRecommendationTextWithContext(matchScore, matchedSkills, user),
+      reasoning: generateIntelligentReasoning(finalScore, matchedSkills, opp, user),
+      recommendation: generateIntelligentRecommendation(finalScore, matchedSkills, opp, user),
       priority: priority,
       theme: opp.theme,
       projectLink: opp.projectLink
     });
   }
   
-  // Ordenar para pegar os melhores
+  // Ordenar por score
   results.sort((a, b) => b.matchScore - a.matchScore);
   
   return results;
 }
 
-interface ScoreParams {
-  userSkills: string[];
-  userDescription: string;
-  userLocation: string;
-  userAvailability: string;
-  opportunity: any;
-  index: number;
-}
-
-function calculateFullScore(params: ScoreParams): number {
-  const { userSkills, userDescription, userLocation, userAvailability, opportunity, index } = params;
+// Calcular match de habilidades
+function calculateSkillMatch(userSkills: string[], opportunity: any): number {
+  if (userSkills.length === 0) return 30;
   
-  const oppTitle = (opportunity.title || '').toLowerCase();
-  const oppDescription = (opportunity.description || '').toLowerCase();
-  const oppTheme = (opportunity.theme || '').toLowerCase();
-  const oppLocation = (opportunity.location || '').toLowerCase();
+  const oppText = `${opportunity.title} ${opportunity.description} ${opportunity.theme}`.toLowerCase();
+  let matchCount = 0;
   
-  let totalScore = 40; // Score base reduzido para dar mais peso aos matches reais
-  
-  // 1. MATCH DE SKILLS (peso maior: 0-40 pontos)
-  let skillMatchCount = 0;
   for (const skill of userSkills) {
-    if (oppTitle.includes(skill)) {
-      totalScore += 15;
-      skillMatchCount++;
-    } else if (oppTheme.includes(skill)) {
-      totalScore += 10;
-      skillMatchCount++;
-    } else if (oppDescription.includes(skill)) {
-      totalScore += 5;
-      skillMatchCount++;
-    }
-  }
-  totalScore += Math.min(10, skillMatchCount * 2);
-  
-  // 2. ANÁLISE DO "SOBRE MIM" (peso médio: 0-25 pontos)
-  if (userDescription.length > 0) {
-    const descriptionWords = userDescription.split(/\s+/);
-    let contextMatchCount = 0;
-    
-    for (const word of descriptionWords) {
-      if (word.length > 4 && oppDescription.includes(word)) {
-        contextMatchCount++;
-      }
-    }
-    
-    // Verificar áreas de interesse no texto do usuário
-    const interestKeywords = ['educação', 'saúde', 'ambiente', 'social', 'criança', 'idoso', 'animal', 'cultura', 'esporte', 'tecnologia'];
-    for (const keyword of interestKeywords) {
-      if (userDescription.includes(keyword) && (oppTheme.includes(keyword) || oppTitle.includes(keyword))) {
-        totalScore += 8;
-      }
-    }
-    
-    totalScore += Math.min(15, contextMatchCount);
-  }
-  
-  // 3. LOCALIZAÇÃO (peso médio: 0-15 pontos)
-  if (userLocation.length > 0 && oppLocation.length > 0) {
-    const userCity = userLocation.split(',')[0].trim();
-    const oppCity = oppLocation.split(',')[0].trim();
-    
-    if (userCity === oppCity || oppLocation.includes(userCity)) {
-      totalScore += 15;
-    } else if (userLocation.includes('são paulo') && oppLocation.includes('sp')) {
-      totalScore += 8;
-    } else if (userLocation.includes('rio de janeiro') && oppLocation.includes('rj')) {
-      totalScore += 8;
-    } else if (oppLocation.includes('brasil')) {
-      totalScore += 3;
+    if (oppText.includes(skill.toLowerCase())) {
+      matchCount++;
     }
   }
   
-  // 4. DISPONIBILIDADE
-  if (userAvailability.length > 0) {
-    if (userAvailability.includes('fim de semana') && (oppDescription.includes('sábado') || oppDescription.includes('domingo'))) {
-      totalScore += 10;
-    }
-    if (userAvailability.includes('flexível') || userAvailability.includes('qualquer')) {
-      totalScore += 5;
-    }
-  }
+  const matchPercentage = (matchCount / userSkills.length) * 100;
   
-  // 5. Variação baseada no índice para não ser sempre igual
-  const variation = (index * 17) % 20;
-  totalScore += variation;
-  
-  // Garantir score entre 30 e 92
-  let finalScore = Math.min(92, Math.max(30, totalScore));
-  
-  return Math.floor(finalScore);
+  // Mínimo 30%, máximo 95%
+  return Math.min(95, Math.max(30, matchPercentage));
 }
 
-function findMatchedSkillsFromUserData(userSkills: string[], userDescription: string, opportunity: any): string[] {
+// Extrair interesses do texto do usuário
+function extractInterestsFromText(text: string): string[] {
+  const interests: string[] = [];
+  const interestCategories = ['educação', 'saúde', 'ambiente', 'social', 'crianças', 'idosos', 'animais', 'tecnologia', 'cultura', 'esportes', 'emergência'];
+  
+  for (const interest of interestCategories) {
+    if (text.includes(interest)) {
+      interests.push(interest);
+    }
+  }
+  
+  return interests;
+}
+
+// Calcular match de interesses
+function calculateInterestMatch(userInterests: string[], opportunity: any, categories: Record<string, string[]>): number {
+  if (userInterests.length === 0) return 40;
+  
+  const oppText = `${opportunity.title} ${opportunity.description} ${opportunity.theme}`.toLowerCase();
+  let matchScore = 0;
+  let possibleMatches = 0;
+  
+  for (const interest of userInterests) {
+    const keywords = categories[interest] || [interest];
+    for (const keyword of keywords) {
+      if (oppText.includes(keyword)) {
+        matchScore += 20;
+        break;
+      }
+    }
+    possibleMatches += 20;
+  }
+  
+  if (possibleMatches === 0) return 40;
+  
+  const percentage = (matchScore / possibleMatches) * 100;
+  return Math.min(90, Math.max(35, percentage));
+}
+
+// Calcular match de palavras-chave
+function calculateKeywordMatch(userKeywords: string[], opportunity: any): number {
+  if (userKeywords.length === 0) return 35;
+  
+  const oppText = `${opportunity.title} ${opportunity.description} ${opportunity.theme}`.toLowerCase();
+  let matchCount = 0;
+  
+  for (const keyword of userKeywords) {
+    if (oppText.includes(keyword)) {
+      matchCount++;
+    }
+  }
+  
+  const percentage = (matchCount / userKeywords.length) * 100;
+  return Math.min(85, Math.max(30, percentage));
+}
+
+// Calcular match de localização
+function calculateLocationMatch(userLocation: string, oppLocation: string): number {
+  if (!userLocation || userLocation.length === 0) return 50;
+  if (!oppLocation) return 50;
+  
+  const userLower = userLocation.toLowerCase();
+  const oppLower = oppLocation.toLowerCase();
+  
+  // Mesma cidade
+  if (oppLower.includes(userLower.split(',')[0].trim()) || userLower.includes(oppLower.split(',')[0].trim())) {
+    return 95;
+  }
+  
+  // Mesmo estado
+  const userState = userLower.split(',').pop()?.trim() || '';
+  const oppState = oppLower.split(',').pop()?.trim() || '';
+  if (userState && oppState && userState === oppState) {
+    return 70;
+  }
+  
+  // Remoto ou qualquer lugar
+  if (oppLower.includes('remote') || oppLower.includes('online') || oppLower.includes('home')) {
+    return 85;
+  }
+  
+  return 50;
+}
+
+// Calcular match de disponibilidade
+function calculateAvailabilityMatch(userAvailability: string, opportunity: any): number {
+  if (!userAvailability || userAvailability.length === 0) return 60;
+  
+  const userLower = userAvailability.toLowerCase();
+  const oppText = `${opportunity.title} ${opportunity.description}`.toLowerCase();
+  
+  if (userLower.includes('flexível') || userLower.includes('qualquer')) {
+    return 90;
+  }
+  
+  if (userLower.includes('fim de semana') && (oppText.includes('sábado') || oppText.includes('domingo') || oppText.includes('weekend'))) {
+    return 85;
+  }
+  
+  if (userLower.includes('noite') && oppText.includes('noite')) {
+    return 80;
+  }
+  
+  if (userLower.includes('manhã') && oppText.includes('manhã')) {
+    return 80;
+  }
+  
+  return 60;
+}
+
+// Encontrar matches exatos de habilidades
+function findExactSkillMatches(userSkills: string[], opportunity: any): string[] {
   const matched: string[] = [];
   const oppText = `${opportunity.title} ${opportunity.description} ${opportunity.theme}`.toLowerCase();
   
-  // Skills explícitas
   for (const skill of userSkills) {
     if (oppText.includes(skill.toLowerCase())) {
       matched.push(skill);
     }
   }
   
-  // Se não encontrou skills, buscar no "sobre mim"
-  if (matched.length === 0 && userDescription.length > 0) {
-    const descriptionWords = userDescription.split(/\s+/);
-    const uniqueWords = [...new Set(descriptionWords.filter(w => w.length > 5))];
-    
-    for (const word of uniqueWords.slice(0, 10)) {
-      if (oppText.includes(word.toLowerCase())) {
-        matched.push(word.substring(0, 20));
-      }
-    }
-  }
-  
-  // Sugestões baseadas no tema
-  if (matched.length === 0 && opportunity.theme) {
-    const suggestions: { [key: string]: string[] } = {
-      'Educação': ['Comunicação', 'Ensino', 'Planejamento'],
-      'Saúde': ['Atendimento', 'Organização', 'Empatia'],
-      'Meio Ambiente': ['Sustentabilidade', 'Conscientização', 'Organização'],
-      'Social': ['Comunicação', 'Empatia', 'Trabalho em equipe'],
-      'Tecnologia': ['Informática', 'Resolução de problemas', 'Comunicação'],
-      'Cultura': ['Artes', 'Criatividade', 'Comunicação'],
-    };
-    
-    const suggestion = suggestions[opportunity.theme];
-    if (suggestion) {
-      return suggestion;
-    }
-    return ['Voluntariado', 'Compromisso social', 'Trabalho em equipe'];
-  }
-  
   return matched;
 }
 
-function generateReasoningTextWithContext(score: number, matchedSkills: string[], title: string, user: any): string {
-  const shortTitle = title.length > 45 ? title.substring(0, 45) + '...' : title;
+// Gerar reasoning inteligente
+function generateIntelligentReasoning(score: number, matchedSkills: string[], opportunity: any, user: any): string {
+  const title = opportunity.title.length > 50 ? opportunity.title.substring(0, 50) + '...' : opportunity.title;
   
-  if (score >= 75) {
-    if (matchedSkills.length > 0) {
-      return `Excelente compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são muito relevantes para "${shortTitle}".`;
+  if (score >= 80) {
+    if (matchedSkills.length >= 2) {
+      return `🏆 Excelente! Seu perfil é extremamente compatível com "${title}". Suas habilidades em ${matchedSkills.slice(0, 2).join(' e ')} são exatamente o que o projeto precisa.`;
     }
-    return `Excelente oportunidade! Seu perfil está muito alinhado com as necessidades deste projeto.`;
-  } else if (score >= 60) {
-    if (matchedSkills.length > 0) {
-      return `Ótima compatibilidade! Sua experiência em ${matchedSkills.slice(0, 2).join(', ')} será muito útil para este projeto.`;
+    return `🎯 Perfeito! "${title}" está muito alinhado com seu perfil e objetivos de voluntariado. Uma oportunidade única para você!`;
+  } else if (score >= 65) {
+    if (matchedSkills.length >= 1) {
+      return `👍 Ótima oportunidade! Sua experiência em ${matchedSkills[0]} será muito valiosa para este projeto.`;
     }
-    return `Boa compatibilidade! Este projeto está bem alinhado com seu perfil e interesses.`;
-  } else if (score >= 45) {
-    return `Compatibilidade positiva! Você pode contribuir de forma significativa para este projeto e desenvolver novas habilidades.`;
+    return `💡 Muito bom! Seu perfil se destaca para esta oportunidade. Você tem muito a contribuir e aprender.`;
+  } else if (score >= 50) {
+    if (matchedSkills.length >= 1) {
+      return `📌 Boa compatibilidade! Sua habilidade em ${matchedSkills[0]} é relevante. Considere se candidatar.`;
+    }
+    return `🔍 Oportunidade interessante! Seu perfil tem potencial para contribuir e se desenvolver neste projeto.`;
   } else {
-    return `Oportunidade interessante para expandir sua experiência e fazer a diferença em uma nova área.`;
+    return `🌱 Ótima chance de crescimento! Embora não seja sua especialidade principal, este projeto pode enriquecer sua experiência.`;
   }
 }
 
-function generateRecommendationTextWithContext(score: number, matchedSkills: string[], user: any): string {
-  if (score >= 75) {
-    if (matchedSkills.length > 0) {
-      return `Recomendação forte: Candidate-se agora! Excelente alinhamento com suas habilidades em ${matchedSkills.slice(0, 2).join(', ')}.`;
-    }
-    return `Recomendação forte: Esta oportunidade é perfeita para o seu perfil!`;
-  } else if (score >= 60) {
-    if (matchedSkills.length > 0) {
-      return `Recomendação: Considere se candidatar. Suas habilidades serão muito valorizadas nesta oportunidade.`;
-    }
-    return `Recomendação: Ótima oportunidade para aplicar seus conhecimentos e crescer.`;
-  } else if (score >= 45) {
-    return `Recomendação: Vale a pena explorar esta oportunidade e desenvolver novas competências.`;
+// Gerar recommendation inteligente
+function generateIntelligentRecommendation(score: number, matchedSkills: string[], opportunity: any, user: any): string {
+  if (score >= 80) {
+    return `Recomendação Forte: Candidate-se imediatamente! Esta oportunidade foi feita para o seu perfil. 🚀`;
+  } else if (score >= 65) {
+    return `Recomendação Positiva: Vale muito a pena se candidatar. Suas habilidades serão muito úteis. ✨`;
+  } else if (score >= 50) {
+    return `Recomendação: Boa oportunidade para aplicar seus conhecimentos e aprender mais. 💡`;
   } else {
-    return `Recomendação: Uma chance de aprender e contribuir em uma área diferente da sua.`;
+    return `Recomendação: Considere explorar esta chance para expandir seus horizontes no voluntariado. 🌟`;
   }
 }
+
+// Adicionar variação para evitar sempre os mesmos resultados
+function addUserVariation(matches: MatchResult[], userId: string): MatchResult[] {
+  const session = userSessionCache.get(userId);
+  const now = Date.now();
+  
+  // Se tem sessão recente (menos de 30 min), evitar mostrar exatamente os mesmos
+  if (session && (now - session.timestamp) < 30 * 60 * 1000) {
+    const recentIds = new Set(session.recentIds);
+    
+    // Ajustar scores levemente para dar prioridade a vagas não vistas
+    matches = matches.map(match => {
+      if (recentIds.has(match.id)) {
+        // Reduzir score em 3-7 pontos para variar
+        return { ...match, matchScore: Math.max(30, match.matchScore - (Math.floor(Math.random() * 5) + 3)) };
+      }
+      return match;
+    });
+    
+    // Reordenar com os novos scores
+    matches.sort((a, b) => b.matchScore - a.matchScore);
+  }
+  
+  return matches;
+}
+
+// Atualizar cache do usuário
+function updateUserCache(userId: string, recentMatches: MatchResult[]) {
+  userSessionCache.set(userId, {
+    timestamp: Date.now(),
+    recentIds: recentMatches.map(m => m.id)
+  });
+}
+
+// Limpar cache antigo periodicamente (opcional)
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of userSessionCache.entries()) {
+    if (now - value.timestamp > 60 * 60 * 1000) { // 1 hora
+      userSessionCache.delete(key);
+    }
+  }
+}, 60 * 60 * 1000);
