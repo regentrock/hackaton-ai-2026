@@ -1,159 +1,101 @@
-# 🌍 AI Volunteer Matcher
+# VoluntaRE
 
-### Conectando pessoas a causas com inteligência
-
-Plataforma que utiliza **IA com IBM watsonx Orchestrate** para analisar o perfil de voluntários e conectá-los automaticamente a oportunidades reais de impacto social.
+### Orquestração inteligente de voluntariado em situações de crise
 
 ---
 
-## Visão Geral
+## Sobre o projeto
 
-O projeto resolve um problema real:
+O **VoluntaRE** é uma plataforma digital que utiliza Inteligência Artificial para conectar voluntários e instituições de forma eficiente, especialmente em cenários de emergência, desastres naturais e vulnerabilidade social.
 
-> Pessoas querem ajudar, mas não sabem onde se encaixam.
-
-Nossa solução utiliza **inteligência artificial** para:
-
-* entender habilidades do usuário
-* identificar áreas de atuação
-* gerar recomendações personalizadas
-* conectar com oportunidades reais de voluntariado
+A proposta é transformar a intenção de ajudar em ações organizadas e direcionadas, garantindo acesso rápido tanto para voluntários quanto para instituições, de forma que cada pessoa contribua no momento certo, com as habilidades adequadas e gerando o máximo impacto possível.
 
 ---
 
-## Como Funciona
+## Problema
 
-1. O usuário cria uma conta e descreve suas habilidades
-2. A IA (Watsonx Orchestrate) analisa o perfil
-3. O sistema busca oportunidades via API
-4. Um algoritmo de match gera compatibilidade
-5. O usuário recebe recomendações personalizadas
+Em contextos de crise, existe uma desconexão significativa entre quem deseja ajudar e quem realmente precisa de apoio. Entre os principais desafios estão:
 
----
-
-## Inteligência Artificial
-
-Utilizamos **IBM watsonx Orchestrate** para:
-
-* análise de descrição do usuário
-* extração de skills
-* classificação de perfil
-* recomendação de oportunidades
-* interação via assistente inteligente
+* Falta de direcionamento adequado para voluntários
+* Dificuldade das instituições em gerenciar pessoas e demandas
+* Redundância de esforços e baixa priorização
+* Comunicação ineficiente
 
 ---
 
-## Integrações
+## Solução
 
-* API de oportunidades: GlobalGiving
-* IA: IBM Watsonx Orchestrate
-* Sistema de matching próprio
+A plataforma propõe um sistema de voluntariado baseado em habilidades, com suporte de Inteligência Artificial para:
 
----
-
-## Funcionalidades
-
-### Autenticação
-
-* Cadastro e login de usuários
-* Persistência de sessão
+* Mapear competências e disponibilidade dos voluntários
+* Registrar necessidades reais das instituições
+* Realizar recomendações inteligentes de alocação
+* Organizar e distribuir tarefas automaticamente
+* Monitorar ações em tempo real
 
 ---
 
-### Dashboard
+## Funcionamento
 
-* Visualização do perfil
-* Skills detectadas pela IA
-* Oportunidades salvas
+O fluxo da plataforma acontece da seguinte forma:
 
----
-
-### Oportunidades
-
-* Listagem de vagas reais
-* Match inteligente baseado no perfil
-* Score de compatibilidade
-* Salvamento de oportunidades
+* Cadastro e autenticação de voluntários
+* Registro de habilidades, localização e disponibilidade
+* Integração com APIs de instituições em todo o Brasil
+* Inserção de demandas com nível de prioridade
+* Processamento inteligente dos dados
+* Algoritmos analisam perfis e realizam o melhor direcionamento
+* Orquestração automatizada das tarefas
+* Monitoramento contínuo da execução das ações
 
 ---
 
-### Assistente IA
+## Tecnologias
 
-* Chat com agente personalizado
-* Suporte ao usuário
-* Recomendações guiadas
-
----
-
-## Estrutura do Projeto
-
-```bash
-
-## Tecnologias Utilizadas
-
-* **Frontend:** Next.js + React + TailwindCSS
-* **Backend:** Node.js (API Routes)
-* **Banco de dados:** PostgreSQL (Supabase)
-* **ORM:** Prisma
-* **IA:** IBM Watsonx Orchestrate
+* **Frontend:** Next.js
+* **Backend:** Node.js
+* **Banco de dados:** Supabase (PostgreSQL)
+* **Inteligência Artificial:** IBM watsonx Orchestrate e watsonx.ai
 
 ---
 
-## Design
+## Arquitetura (visão geral)
 
-O design foi pensado para transmitir:
+A aplicação segue uma arquitetura moderna e modular:
 
-* urgência (vermelhos)
-* confiança (azul escuro)
-* humanização (tons neutros)
-
-Inspirado em cenários de **resposta a desastres naturais**.
+* Interface construída com Next.js para interação com o usuário
+* API em Node.js responsável pela lógica de negócio
+* Supabase utilizado para autenticação, banco de dados e armazenamento
+* Integração com serviços de IA para recomendação e orquestração de tarefas
 
 ---
 
 ## Diferenciais
 
-* IA que entende o usuário (não só coleta dados)
-* Integração com oportunidades reais
-* Matching inteligente
-* Assistente conversacional integrado
-* Interface moderna e imersiva
+* Abordagem baseada em habilidades (*skill-based volunteering*)
+* Uso de IA para tomada de decisão e priorização
+* Redução de retrabalho e melhor aproveitamento de recursos
+* Arquitetura escalável e moderna
 
 ---
 
-## Possíveis Melhorias
+## Impacto
 
-* Sistema de notificações
-* Geolocalização de oportunidades
-* Avaliação de voluntários
-* Integração com mais APIs
-* Sistema de ranking de impacto
-
----
-
-## Público-Alvo
-
-* Voluntários iniciantes
-* ONGs
-* Projetos sociais
-* Organizações de resposta a desastres
+* Maior eficiência na coordenação de voluntários
+* Respostas mais rápidas em situações emergenciais
+* Melhor aproveitamento do potencial humano
+* Aumento do impacto social das ações
 
 ---
 
-## Conclusão
+## Equipe
 
-Este projeto demonstra como a IA pode:
-
-> transformar intenção em ação real
-
-Conectando pessoas certas às causas certas, no momento certo.
+* Ângelo David dos Santos
+* Yasmim Aparecida Pinheiro da Costa
+* Matheus Felipe Soares de Souza
 
 ---
 
-## Demo
+## 🏁 Contexto
 
-https://hackaton-ai-2026.vercel.app/
-
----
-
-## Desenvolvido para Hackathon
+Projeto desenvolvido no **Hackathon IA Descomplicada: Da Ideia à Implementação (UNASP + IBM)**.
