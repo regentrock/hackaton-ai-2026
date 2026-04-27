@@ -1,4 +1,4 @@
-// app/api/match/route.ts - VERSÃO COM IBM WATSONX REAL
+// app/api/match/route.ts - VERSÃO COM IBM GRANITE 3-8B-INSTRUCT
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/src/lib/auth/authUtils';
 
@@ -50,7 +50,7 @@ let userSemanticCache: Map<string, { timestamp: number, analysis: any }> = new M
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
-  console.log('\n🚀 ========== MATCH API COM IBM WATSONX REAL ==========');
+  console.log('\n🚀 ========== MATCH API COM IBM GRANITE 3-8B ==========');
   
   try {
     // 1. Autenticação
@@ -97,7 +97,7 @@ export async function GET(request: NextRequest) {
     console.log('🎯 Skills:', user.skills);
     console.log('📝 Sobre:', user.description?.substring(0, 200) || 'Não informado');
 
-    // 3. Verificar se temos credenciais da IBM WatsonX
+    // 3. Verificar credenciais IBM
     const hasWatsonX = !!(process.env.IBM_API_KEY && process.env.IBM_PROJECT_ID);
     
     if (!hasWatsonX) {
@@ -108,17 +108,17 @@ export async function GET(request: NextRequest) {
       }, { status: 500 });
     }
 
-    // 4. Analisar perfil do usuário com WatsonX (análise semântica real)
+    // 4. Analisar perfil do usuário com IBM Granite
     let userSemanticAnalysis = userSemanticCache.get(user.id)?.analysis;
     const now = Date.now();
     
     if (!userSemanticAnalysis || (now - (userSemanticCache.get(user.id)?.timestamp || 0)) > 60 * 60 * 1000) {
-      console.log('🧠 Enviando perfil para análise semântica da IBM WatsonX...');
-      userSemanticAnalysis = await analyzeUserSemanticallyWithWatsonX(user);
+      console.log('🧠 Analisando perfil com IBM Granite 3-8B...');
+      userSemanticAnalysis = await analyzeUserWithGranite(user);
       userSemanticCache.set(user.id, { timestamp: now, analysis: userSemanticAnalysis });
-      console.log('✅ Análise semântica concluída:', JSON.stringify(userSemanticAnalysis, null, 2));
+      console.log('✅ Análise concluída:', JSON.stringify(userSemanticAnalysis, null, 2));
     } else {
-      console.log('📦 Usando análise semântica em cache');
+      console.log('📦 Usando análise em cache');
     }
 
     // 5. Buscar oportunidades
@@ -134,22 +134,21 @@ export async function GET(request: NextRequest) {
 
     console.log(`📦 ${opportunities.length} oportunidades para analisar`);
 
-    // 6. Analisar cada oportunidade com WatsonX (análise semântica)
-    const matches = await analyzeOpportunitiesWithWatsonX(userSemanticAnalysis, opportunities);
+    // 6. Analisar oportunidades com IBM Granite
+    const matches = await analyzeOpportunitiesWithGranite(userSemanticAnalysis, opportunities);
 
     // 7. Ordenar por score
     matches.sort((a, b) => b.matchScore - a.matchScore);
     
     // 8. Log dos resultados
-    console.log('\n📊 RESULTADOS DA ANÁLISE SEMÂNTICA:');
+    console.log('\n📊 RESULTADOS:');
     console.log(`   🔥 Alta compatibilidade (70-100%): ${matches.filter(m => m.matchScore >= 70).length}`);
     console.log(`   📌 Média compatibilidade (45-69%): ${matches.filter(m => m.matchScore >= 45 && m.matchScore < 70).length}`);
     console.log(`   🌱 Baixa compatibilidade (0-44%): ${matches.filter(m => m.matchScore < 45).length}`);
     
-    console.log('\n🏆 TOP 10 MATCHES (Analisados por IA):');
+    console.log('\n🏆 TOP 10 MATCHES:');
     matches.slice(0, 10).forEach((m, i) => {
       console.log(`   ${i+1}. ${m.matchScore}% - ${m.title.substring(0, 55)}...`);
-      console.log(`      Reasoning: ${m.reasoning.substring(0, 80)}...`);
     });
 
     return NextResponse.json({
@@ -161,177 +160,23 @@ export async function GET(request: NextRequest) {
       executionTimeMs: Date.now() - startTime,
       usingAI: true,
       aiProvider: 'IBM WatsonX',
-      aiModel: 'llama-3-2-3b-instruct'
+      aiModel: 'ibm/granite-3-8b-instruct'
     });
 
   } catch (error: any) {
     console.error('❌ ERRO NA API:', error);
     return NextResponse.json(
-      { error: error.message || 'Internal server error', details: error.toString() },
+      { error: error.message || 'Internal server error' },
       { status: 500 }
     );
   }
 }
 
-// Função para analisar semanticamente o perfil do usuário com WatsonX
-async function analyzeUserSemanticallyWithWatsonX(user: UserProfile): Promise<any> {
-  const prompt = `You are an AI semantic analyzer for volunteer matching. Analyze the following volunteer profile and return ONLY valid JSON.
-
-VOLUNTEER PROFILE:
-- Name: ${user.name}
-- Skills: ${user.skills?.join(', ') || 'None provided'}
-- Self-description: ${user.description || 'None provided'}
-- Location: ${user.location || 'Not specified'}
-- Availability: ${user.availability || 'Not specified'}
-
-Based on semantic understanding of their skills and description, identify:
-
-1. PRIMARY_CATEGORY: The main category that best matches their profile (choose ONE: "Education", "Health", "Environment", "Social Services", "Technology", "Arts & Culture", "Sports", "Animals")
-
-2. SECONDARY_CATEGORIES: Other relevant categories (array of strings)
-
-3. KEY_SKILLS: Extract the most relevant skills from their profile (array of strings, max 8)
-
-4. INTERESTS: Infer what topics/areas they care about (array of strings, max 6)
-
-5. PERSONALITY_TRAITS: Infer personality traits from the description (array of strings, max 4)
-
-6. EXPERIENCE_LEVEL: "beginner", "intermediate", or "advanced"
-
-7. SEMANTIC_TAGS: Key semantic concepts extracted from their profile (array of strings, max 10)
-
-Return EXACTLY this JSON format (no other text):
-{
-  "primary_category": "string",
-  "secondary_categories": ["string"],
-  "key_skills": ["string"],
-  "interests": ["string"],
-  "personality_traits": ["string"],
-  "experience_level": "string",
-  "semantic_tags": ["string"]
-}`;
-
-  const response = await callWatsonX(prompt);
-  
-  try {
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
-    }
-    return JSON.parse(response);
-  } catch (error) {
-    console.error('❌ Erro ao parsear resposta da WatsonX:', error);
-    throw new Error('Falha na análise semântica do perfil');
-  }
-}
-
-// Função para analisar compatibilidade com WatsonX
-async function analyzeOpportunitiesWithWatsonX(userAnalysis: any, opportunities: Opportunity[]): Promise<MatchResult[]> {
-  const results: MatchResult[] = [];
-  const batchSize = 3; // Processar 3 por vez para não sobrecarregar
-  
-  console.log(`🔍 Analisando ${opportunities.length} oportunidades com IBM WatsonX...`);
-  
-  for (let i = 0; i < opportunities.length; i += batchSize) {
-    const batch = opportunities.slice(i, i + batchSize);
-    
-    const batchPromises = batch.map(async (opp, idx) => {
-      const prompt = `You are an AI matching expert. Analyze the semantic compatibility between a volunteer and an opportunity.
-
-VOLUNTEER SEMANTIC PROFILE:
-- Primary Category: ${userAnalysis.primary_category}
-- Secondary Categories: ${userAnalysis.secondary_categories?.join(', ')}
-- Key Skills: ${userAnalysis.key_skills?.join(', ')}
-- Interests: ${userAnalysis.interests?.join(', ')}
-- Semantic Tags: ${userAnalysis.semantic_tags?.join(', ')}
-- Experience Level: ${userAnalysis.experience_level}
-
-OPPORTUNITY:
-- Title: ${opp.title}
-- Theme: ${opp.theme}
-- Location: ${opp.location}
-- Description: ${opp.description?.substring(0, 500)}
-
-Based on SEMANTIC UNDERSTANDING, calculate:
-1. matchScore: Number from 0-100 (be realistic and strict)
-2. matchedSkills: Which of the volunteer's skills are relevant to this opportunity (max 4)
-3. reasoning: Brief explanation in Portuguese why this is a good or bad match (1-2 sentences)
-4. recommendation: Personalized recommendation in Portuguese for the volunteer (1 sentence)
-5. relevanceLevel: "high", "medium", or "low"
-
-Return EXACTLY this JSON format:
-{
-  "matchScore": 0,
-  "matchedSkills": [],
-  "reasoning": "",
-  "recommendation": "",
-  "relevanceLevel": ""
-}`;
-
-      try {
-        const response = await callWatsonX(prompt);
-        const jsonMatch = response.match(/\{[\s\S]*\}/);
-        const analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(response);
-        
-        console.log(`   ✅ Oportunidade ${i + idx + 1}/${opportunities.length} analisada - Score: ${analysis.matchScore}`);
-        
-        return {
-          id: opp.id,
-          title: opp.title,
-          organization: opp.organization,
-          location: opp.location,
-          description: opp.description?.substring(0, 300),
-          skills: [],
-          matchScore: Math.min(100, Math.max(0, analysis.matchScore || 50)),
-          matchedSkills: (analysis.matchedSkills || []).slice(0, 4),
-          missingSkills: [],
-          reasoning: analysis.reasoning || `Compatível com seu perfil em ${userAnalysis.primary_category}.`,
-          recommendation: analysis.recommendation || `Recomendamos conhecer esta oportunidade.`,
-          priority: analysis.relevanceLevel === 'high' ? 'high' : analysis.relevanceLevel === 'medium' ? 'medium' : 'low',
-          theme: opp.theme,
-          projectLink: opp.projectLink
-        } as MatchResult;
-      } catch (error) {
-        console.error(`❌ Erro na oportunidade ${i + idx + 1}:`, error);
-        // Fallback para não parar o processo
-        return {
-          id: opp.id,
-          title: opp.title,
-          organization: opp.organization,
-          location: opp.location,
-          description: opp.description?.substring(0, 300),
-          skills: [],
-          matchScore: 45,
-          matchedSkills: userAnalysis.key_skills?.slice(0, 2) || [],
-          missingSkills: [],
-          reasoning: `Análise baseada no seu perfil em ${userAnalysis.primary_category}.`,
-          recommendation: `Explore esta oportunidade para fazer a diferença.`,
-          priority: 'medium',
-          theme: opp.theme,
-          projectLink: opp.projectLink
-        } as MatchResult;
-      }
-    });
-    
-    const batchResults = await Promise.all(batchPromises);
-    results.push(...batchResults);
-    
-    // Delay entre lotes para não sobrecarregar a API
-    await new Promise(resolve => setTimeout(resolve, 500));
-    console.log(`   📊 Progresso: ${Math.min(i + batchSize, opportunities.length)}/${opportunities.length} oportunidades analisadas`);
-  }
-  
-  return results;
-}
-
-// Chamar API da IBM WatsonX
-async function callWatsonX(prompt: string): Promise<string> {
+// Obter token de acesso IBM Cloud
+async function getIBMToken(): Promise<string> {
   const apiKey = process.env.IBM_API_KEY;
-  const projectId = process.env.IBM_PROJECT_ID;
-  const url = `${process.env.IBM_URL}/ml/v1/text/generation?version=2023-05-29`;
   
-  // Primeiro, obter token de acesso
-  const tokenResponse = await fetch('https://iam.cloud.ibm.com/identity/token', {
+  const response = await fetch('https://iam.cloud.ibm.com/identity/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -340,18 +185,27 @@ async function callWatsonX(prompt: string): Promise<string> {
     })
   });
   
-  if (!tokenResponse.ok) {
-    throw new Error(`Falha ao obter token IBM: ${tokenResponse.status}`);
+  if (!response.ok) {
+    throw new Error(`Falha ao obter token IBM: ${response.status}`);
   }
   
-  const { access_token } = await tokenResponse.json();
+  const data = await response.json();
+  return data.access_token;
+}
+
+// Chamar IBM Granite 3-8B-Instruct
+async function callGranite(prompt: string): Promise<string> {
+  const token = await getIBMToken();
+  const projectId = process.env.IBM_PROJECT_ID;
+  const url = `${process.env.IBM_URL}/ml/v1/text/generation?version=2023-05-29`;
   
-  // Chamar a API de geração
+  console.log('📡 Chamando IBM Granite 3-8B-Instruct...');
+  
   const response = await fetch(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${access_token}`
+      'Authorization': `Bearer ${token}`
     },
     body: JSON.stringify({
       input: prompt,
@@ -369,11 +223,128 @@ async function callWatsonX(prompt: string): Promise<string> {
   
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`WatsonX API error: ${response.status} - ${errorText}`);
+    console.error(`❌ Erro Granite API: ${response.status} - ${errorText}`);
+    throw new Error(`Granite API error: ${response.status}`);
   }
   
   const data = await response.json();
   return data.results?.[0]?.generated_text || '';
+}
+
+// Analisar perfil do usuário com Granite
+async function analyzeUserWithGranite(user: UserProfile): Promise<any> {
+  const prompt = `[INST] You are an AI semantic analyzer. Analyze this volunteer profile and return ONLY JSON.
+
+Volunteer:
+- Skills: ${user.skills?.join(', ') || 'None'}
+- About: ${user.description || 'None'}
+
+Return this exact JSON format:
+{
+  "primary_category": "Education|Health|Environment|Social|Technology|Culture|Sports|Animals",
+  "secondary_categories": ["string"],
+  "key_skills": ["string"],
+  "interests": ["string"],
+  "semantic_tags": ["string"]
+}[/INST]`;
+
+  const response = await callGranite(prompt);
+  
+  try {
+    const jsonMatch = response.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    return JSON.parse(response);
+  } catch (error) {
+    console.error('❌ Erro ao parsear resposta:', error);
+    throw new Error('Falha na análise do perfil');
+  }
+}
+
+// Analisar oportunidades com Granite
+async function analyzeOpportunitiesWithGranite(userAnalysis: any, opportunities: Opportunity[]): Promise<MatchResult[]> {
+  const results: MatchResult[] = [];
+  
+  console.log(`🔍 Analisando ${opportunities.length} oportunidades com IBM Granite...`);
+  
+  // Limitar para não sobrecarregar (analisar até 40)
+  const toAnalyze = opportunities.slice(0, 40);
+  
+  for (let i = 0; i < toAnalyze.length; i++) {
+    const opp = toAnalyze[i];
+    
+    const prompt = `[INST] You are a matching expert. Compare volunteer with opportunity and return ONLY JSON.
+
+Volunteer:
+- Category: ${userAnalysis.primary_category}
+- Skills: ${userAnalysis.key_skills?.slice(0, 5).join(', ')}
+- Interests: ${userAnalysis.interests?.slice(0, 3).join(', ')}
+
+Opportunity:
+- Title: ${opp.title}
+- Theme: ${opp.theme}
+- Location: ${opp.location}
+- Description: ${opp.description?.substring(0, 300)}
+
+Return:
+{
+  "matchScore": 0-100,
+  "matchedSkills": [],
+  "reasoning": "string in Portuguese",
+  "recommendation": "string in Portuguese",
+  "relevanceLevel": "high|medium|low"
+}[/INST]`;
+
+    try {
+      const response = await callGranite(prompt);
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(response);
+      
+      console.log(`   ✅ ${i+1}/${toAnalyze.length} - Score: ${analysis.matchScore}`);
+      
+      results.push({
+        id: opp.id,
+        title: opp.title,
+        organization: opp.organization,
+        location: opp.location,
+        description: opp.description?.substring(0, 300),
+        skills: [],
+        matchScore: Math.min(100, Math.max(0, analysis.matchScore || 50)),
+        matchedSkills: (analysis.matchedSkills || userAnalysis.key_skills?.slice(0, 2) || []).slice(0, 4),
+        missingSkills: [],
+        reasoning: analysis.reasoning || `Compatível com seu perfil em ${userAnalysis.primary_category}.`,
+        recommendation: analysis.recommendation || `Recomendamos conhecer esta oportunidade.`,
+        priority: analysis.relevanceLevel === 'high' ? 'high' : analysis.relevanceLevel === 'medium' ? 'medium' : 'low',
+        theme: opp.theme,
+        projectLink: opp.projectLink
+      });
+      
+      // Delay entre chamadas
+      await new Promise(resolve => setTimeout(resolve, 200));
+      
+    } catch (error) {
+      console.error(`❌ Erro na oportunidade ${i+1}:`, error);
+      results.push({
+        id: opp.id,
+        title: opp.title,
+        organization: opp.organization,
+        location: opp.location,
+        description: opp.description?.substring(0, 300),
+        skills: [],
+        matchScore: 50,
+        matchedSkills: userAnalysis.key_skills?.slice(0, 2) || [],
+        missingSkills: [],
+        reasoning: `Oportunidade na área de ${opp.theme}.`,
+        recommendation: `Explore esta oportunidade.`,
+        priority: 'medium',
+        theme: opp.theme,
+        projectLink: opp.projectLink
+      });
+    }
+  }
+  
+  return results;
 }
 
 // Buscar oportunidades com cache
