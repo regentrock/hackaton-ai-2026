@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import styles from './page.module.css';
@@ -69,6 +69,7 @@ export default function MatchesPage() {
     }
   }, [user, authLoading]);
 
+  // Configurar Intersection Observer para scroll infinito
   useEffect(() => {
     if (observerRef.current) observerRef.current.disconnect();
     
@@ -219,9 +220,9 @@ export default function MatchesPage() {
   const getFilteredTopMatches = (): Match[] => {
     if (activeFilter === 'all') return topMatches;
     return topMatches.filter((m: Match) => {
-      if (activeFilter === 'high') return m.matchScore >= 75;
-      if (activeFilter === 'medium') return m.matchScore >= 60 && m.matchScore < 75;
-      if (activeFilter === 'low') return m.matchScore < 60;
+      if (activeFilter === 'high') return m.matchScore >= 70;
+      if (activeFilter === 'medium') return m.matchScore >= 50 && m.matchScore < 70;
+      if (activeFilter === 'low') return m.matchScore < 50;
       return true;
     });
   };
@@ -230,9 +231,9 @@ export default function MatchesPage() {
     let filtered = moreMatches;
     if (moreFilter !== 'all') {
       filtered = filtered.filter((m: Match) => {
-        if (moreFilter === 'high') return m.matchScore >= 75;
-        if (moreFilter === 'medium') return m.matchScore >= 60 && m.matchScore < 75;
-        if (moreFilter === 'low') return m.matchScore < 60;
+        if (moreFilter === 'high') return m.matchScore >= 70;
+        if (moreFilter === 'medium') return m.matchScore >= 50 && m.matchScore < 70;
+        if (moreFilter === 'low') return m.matchScore < 50;
         return true;
       });
     }
@@ -247,9 +248,9 @@ export default function MatchesPage() {
     let filtered = moreMatches;
     if (moreFilter !== 'all') {
       filtered = filtered.filter((m: Match) => {
-        if (moreFilter === 'high') return m.matchScore >= 75;
-        if (moreFilter === 'medium') return m.matchScore >= 60 && m.matchScore < 75;
-        if (moreFilter === 'low') return m.matchScore < 60;
+        if (moreFilter === 'high') return m.matchScore >= 70;
+        if (moreFilter === 'medium') return m.matchScore >= 50 && m.matchScore < 70;
+        if (moreFilter === 'low') return m.matchScore < 50;
         return true;
       });
     }
@@ -259,9 +260,9 @@ export default function MatchesPage() {
   const filteredTopMatches = getFilteredTopMatches();
   const filteredMoreMatches = getFilteredMoreMatches();
   
-  const highCount = topMatches.filter((m: Match) => m.matchScore >= 75).length;
-  const mediumCount = topMatches.filter((m: Match) => m.matchScore >= 60 && m.matchScore < 75).length;
-  const lowCount = topMatches.filter((m: Match) => m.matchScore < 60).length;
+  const highCount = topMatches.filter((m: Match) => m.matchScore >= 70).length;
+  const mediumCount = topMatches.filter((m: Match) => m.matchScore >= 50 && m.matchScore < 70).length;
+  const lowCount = topMatches.filter((m: Match) => m.matchScore < 50).length;
   const moreTotal = moreMatches.length;
 
   const isSaved = (matchId: string): boolean => savedOpportunities.has(matchId);
@@ -406,7 +407,6 @@ export default function MatchesPage() {
                     <div key={match.id} className={`${styles.matchCard} ${getPriorityClass(match.matchScore)}`}>
                       <div className={styles.cardStripe}></div>
                       <div className={styles.cardInner}>
-                        {/* ... resto do card ... */}
                         <div className={styles.cardHeader}>
                           <div className={styles.cardHeaderLeft}>
                             <div className={styles.cardTitleGroup}>
@@ -489,7 +489,115 @@ export default function MatchesPage() {
 
         {moreMatches.length > 0 && (
           <div className={styles.moreSection}>
-            {/* ... resto da seção more ... */}
+            <div className={styles.moreSectionHeader}>
+              <div className={styles.moreSectionTitle}>
+                <i className="fas fa-compass"></i>
+                <h2 className={styles.sectionSubtitle}>🌍 Explorar mais oportunidades</h2>
+                <span className={styles.totalCount}>{moreTotal} oportunidades disponíveis</span>
+              </div>
+              
+              <div className={styles.moreControls}>
+                <div className={styles.filterGroup}>
+                  <span className={styles.filterLabel}>Filtrar:</span>
+                  <div className={styles.filterChips}>
+                    <button 
+                      onClick={() => setMoreFilter('all')}
+                      className={`${styles.chip} ${moreFilter === 'all' ? styles.active : ''}`}
+                    >
+                      Todos ({moreTotal})
+                    </button>
+                    <button 
+                      onClick={() => setMoreFilter('high')}
+                      className={`${styles.chip} ${moreFilter === 'high' ? styles.active : ''}`}
+                    >
+                      <i className="fas fa-chart-line"></i> Alta
+                    </button>
+                    <button 
+                      onClick={() => setMoreFilter('medium')}
+                      className={`${styles.chip} ${moreFilter === 'medium' ? styles.active : ''}`}
+                    >
+                      <i className="fas fa-chart-simple"></i> Média
+                    </button>
+                    <button 
+                      onClick={() => setMoreFilter('low')}
+                      className={`${styles.chip} ${moreFilter === 'low' ? styles.active : ''}`}
+                    >
+                      <i className="fas fa-seedling"></i> Baixa
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className={styles.moreCardsGrid}>
+              {filteredMoreMatches.map((match: Match) => {
+                const saved = isSaved(match.id);
+                return (
+                  <div key={match.id} className={`${styles.moreCard} ${getPriorityClass(match.matchScore)}`}>
+                    <div className={styles.moreCardStripe}></div>
+                    <div className={styles.moreCardInner}>
+                      <div className={styles.moreCardHeader}>
+                        <div className={styles.moreCardScore}>
+                          <span className={styles.moreScoreValue}>{match.matchScore}%</span>
+                        </div>
+                        <div className={styles.moreCardIcon}>
+                          <i className="fas fa-briefcase"></i>
+                        </div>
+                      </div>
+                      <h4 className={styles.moreCardTitle}>{match.title}</h4>
+                      <p className={styles.moreCardOrg}>{match.organization}</p>
+                      <p className={styles.moreCardLocation}>
+                        <i className="fas fa-map-marker-alt"></i> {match.location}
+                      </p>
+                      <div className={styles.moreCardActions}>
+                        <button 
+                          onClick={() => handleSaveOpportunity(match)}
+                          disabled={savingId === match.id}
+                          className={`${styles.moreSaveButton} ${saved ? styles.savedMore : ''}`}
+                        >
+                          <i className={`fas ${saved ? 'fa-check' : 'fa-heart'}`}></i>
+                          {saved ? 'Salvo' : 'Salvar'}
+                        </button>
+                        <button 
+                          onClick={() => router.push(`/matches/${match.id}`)}
+                          className={styles.moreViewButton}
+                        >
+                          <i className="fas fa-arrow-right"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            {hasMoreToShow() && (
+              <div className={styles.loadMoreContainer}>
+                <button onClick={loadMore} className={styles.loadMoreButton}>
+                  <i className="fas fa-arrow-down"></i>
+                  Carregar mais oportunidades
+                </button>
+              </div>
+            )}
+            
+            {/* 🔥 SCROLL INFINITO TRIGGER 🔥 */}
+            {hasMore && (
+              <div ref={loadMoreRef} className={styles.scrollTrigger} />
+            )}
+            
+            {loadingMore && (
+              <div className={styles.loadingMore}>
+                <div className={styles.spinnerSmall}></div>
+                <p>Carregando mais oportunidades...</p>
+              </div>
+            )}
+            
+            {!hasMore && allMatches.length > 12 && (
+              <div className={styles.endMessage}>
+                <i className="fas fa-check-circle"></i>
+                <p>Você já viu todas as {totalMatches} oportunidades disponíveis</p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -498,14 +606,14 @@ export default function MatchesPage() {
 }
 
 function getScoreClass(score: number): string {
-  if (score >= 75) return 'scoreHigh';
-  if (score >= 60) return 'scoreMedium';
-  if (score >= 45) return 'scoreLow';
+  if (score >= 70) return 'scoreHigh';
+  if (score >= 50) return 'scoreMedium';
+  if (score >= 30) return 'scoreLow';
   return 'scoreVeryLow';
 }
 
 function getPriorityClass(score: number): string {
-  if (score >= 75) return 'high';
-  if (score >= 60) return 'medium';
+  if (score >= 70) return 'high';
+  if (score >= 50) return 'medium';
   return 'low';
 }

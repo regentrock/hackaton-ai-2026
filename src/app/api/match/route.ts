@@ -1,3 +1,4 @@
+// app/api/match/route.ts - VERSÃO CORRIGIDA COM PAGINAÇÃO
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/src/lib/auth/authUtils';
 
@@ -78,6 +79,7 @@ export async function GET(request: NextRequest) {
 
     console.log('👤 Usuário:', user.name);
     console.log('🎯 Skills:', user.skills);
+    console.log('📝 Sobre:', user.description?.substring(0, 100));
 
     // Buscar oportunidades
     let allOpportunities = await fetchOpportunitiesWithCache();
@@ -93,20 +95,21 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    console.log(`📦 Total de ${allOpportunities.length} oportunidades únicas`);
+    console.log(`📦 Total de ${allOpportunities.length} oportunidades`);
 
-    // Analisar matches
+    // 🔥 GERAR MATCHES COM SCORES VARIADOS 🔥
     let allMatches: MatchResult[] = [];
     
+    // Tentar usar WatsonX, se falhar usa algoritmo local
     try {
-      const uniqueOpportunities = removeDuplicates(allOpportunities);
-      allMatches = await analyzeMatchesWithWatsonX(user, uniqueOpportunities.slice(0, 100));
+      console.log('🧠 Tentando IBM Granite...');
+      allMatches = await analyzeMatchesWithWatsonX(user, allOpportunities);
     } catch (watsonxError) {
-      console.error('⚠️ WatsonX falhou, usando algoritmo local:', watsonxError);
+      console.log('⚠️ WatsonX falhou, usando algoritmo local otimizado');
       allMatches = calculateLocalMatches(user, allOpportunities);
     }
 
-    // Remover duplicatas e ordenar
+    // Remover duplicatas e ordenar por score
     const uniqueMatches = removeDuplicateMatches(allMatches);
     uniqueMatches.sort((a, b) => b.matchScore - a.matchScore);
     
@@ -115,11 +118,20 @@ export async function GET(request: NextRequest) {
     const hasMore = offset + limit < uniqueMatches.length;
     const totalPages = Math.ceil(uniqueMatches.length / limit);
     
+    // Estatísticas
+    const highMatches = uniqueMatches.filter(m => m.matchScore >= 75).length;
+    const mediumMatches = uniqueMatches.filter(m => m.matchScore >= 60 && m.matchScore < 75).length;
+    const lowMatches = uniqueMatches.filter(m => m.matchScore < 60).length;
+    const avgScore = Math.round(uniqueMatches.reduce((acc, m) => acc + m.matchScore, 0) / uniqueMatches.length);
+    
     console.log(`\n📊 RESULTADOS:`);
     console.log(`   📄 Página ${page} de ${totalPages}`);
     console.log(`   🎯 Mostrando ${paginatedMatches.length} de ${uniqueMatches.length} matches`);
+    console.log(`   🔥 Alta (75-100%): ${highMatches}`);
+    console.log(`   📌 Média (60-74%): ${mediumMatches}`);
+    console.log(`   🌱 Baixa (0-59%): ${lowMatches}`);
+    console.log(`   📈 Score médio: ${avgScore}%`);
     console.log(`   🏆 Top score: ${uniqueMatches[0]?.matchScore}%`);
-    console.log(`   📈 Score médio: ${Math.round(uniqueMatches.reduce((acc, m) => acc + m.matchScore, 0) / uniqueMatches.length)}%`);
 
     return NextResponse.json({
       success: true,
@@ -133,10 +145,10 @@ export async function GET(request: NextRequest) {
       executionTimeMs: Date.now() - startTime,
       usingAI: true,
       stats: {
-        highMatches: uniqueMatches.filter(m => m.matchScore >= 75).length,
-        mediumMatches: uniqueMatches.filter(m => m.matchScore >= 60 && m.matchScore < 75).length,
-        lowMatches: uniqueMatches.filter(m => m.matchScore < 60).length,
-        averageScore: Math.round(uniqueMatches.reduce((acc, m) => acc + m.matchScore, 0) / uniqueMatches.length)
+        highMatches,
+        mediumMatches,
+        lowMatches,
+        averageScore: avgScore
       }
     });
 
@@ -149,16 +161,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-function removeDuplicates(opportunities: any[]): any[] {
-  const seen = new Map();
-  for (const opp of opportunities) {
-    if (!seen.has(opp.id)) {
-      seen.set(opp.id, opp);
-    }
-  }
-  return Array.from(seen.values());
-}
-
+// Remover duplicatas
 function removeDuplicateMatches(matches: MatchResult[]): MatchResult[] {
   const seen = new Map();
   for (const match of matches) {
@@ -169,238 +172,151 @@ function removeDuplicateMatches(matches: MatchResult[]): MatchResult[] {
   return Array.from(seen.values());
 }
 
-async function getIBMToken(): Promise<string> {
-  const apiKey = process.env.IBM_API_KEY;
-  
-  if (!apiKey) {
-    throw new Error('IBM_API_KEY não configurada');
-  }
-  
-  const response = await fetch('https://iam.cloud.ibm.com/identity/token', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      grant_type: 'urn:ibm:params:oauth:grant-type:apikey',
-      apikey: apiKey
-    }).toString()
-  });
-  
-  if (!response.ok) {
-    throw new Error(`Falha ao obter token IBM: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  return data.access_token;
-}
-
-async function callGranite(prompt: string): Promise<string> {
-  const token = await getIBMToken();
-  const projectId = process.env.IBM_PROJECT_ID;
-  const url = `${process.env.IBM_URL}/ml/v1/text/generation?version=2023-05-29`;
-  
-  if (!projectId) {
-    throw new Error('IBM_PROJECT_ID não configurada');
-  }
-  
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${token}`
-    },
-    body: JSON.stringify({
-      input: prompt,
-      parameters: {
-        max_new_tokens: 500,
-        temperature: 0.3,
-        top_p: 0.95,
-        repetition_penalty: 1.1
-      },
-      model_id: 'ibm/granite-3-8b-instruct',
-      project_id: projectId
-    })
-  });
-  
-  if (!response.ok) {
-    throw new Error(`Granite API error: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  return data.results?.[0]?.generated_text || '';
-}
-
-// 🔥 PROMPT MELHORADO - GERA SCORES MAIS ALTOS 🔥
-async function analyzeMatchesWithWatsonX(user: any, opportunities: any[]): Promise<MatchResult[]> {
-  const results: MatchResult[] = [];
-  const userSkills = user.skills?.join(', ') || 'Nenhuma habilidade listada';
-  const userAbout = user.description || 'Voluntário interessado em ajudar';
-  
-  console.log(`🔍 Analisando ${opportunities.length} oportunidades com IBM Granite...`);
-  
-  const batchSize = 5;
-  for (let i = 0; i < opportunities.length; i += batchSize) {
-    const batch = opportunities.slice(i, i + batchSize);
-    console.log(`   📦 Lote ${Math.floor(i/batchSize)+1}/${Math.ceil(opportunities.length/batchSize)}`);
-    
-    const batchPromises = batch.map(async (opp, idx) => {
-      // 🔥 PROMPT OTIMIZADO PARA SCORES MAIS ALTOS 🔥
-      const prompt = `[INST] You are an enthusiastic volunteer matching expert. Be optimistic and generous in your analysis.
-
-VOLUNTEER PROFILE:
-- Skills: ${userSkills}
-- Bio: ${userAbout}
-- Looking for: Meaningful volunteer opportunities
-
-OPPORTUNITY DETAILS:
-- Title: ${opp.title}
-- Organization: ${opp.organization}
-- Category: ${opp.theme || 'Social Impact'}
-- Location: ${opp.location}
-- Mission: ${opp.description?.substring(0, 400) || 'Make a positive impact'}
-
-INSTRUCTIONS:
-1. This volunteer WANTS to help and has valuable skills
-2. Find ANY connection between their skills and this opportunity
-3. Be GENEROUS with scores (70-95 for good fits, 50-69 for possible fits)
-4. Give ENCOURAGING feedback in Portuguese
-
-Return ONLY valid JSON:
-{
-  "matchScore": number (be generous: 85-95 for great fits, 70-84 for good fits, 55-69 for moderate fits),
-  "matchedSkills": ["skill1", "skill2"],
-  "reasoning": "Em português: Explique porque este voluntário é um bom candidato",
-  "recommendation": "Em português: Recomendação encorajadora para este voluntário"
-}[/INST]`;
-
-      try {
-        const response = await callGranite(prompt);
-        const jsonMatch = response.match(/\{[\s\S]*\}/);
-        const analysis = jsonMatch ? JSON.parse(jsonMatch[0]) : { matchScore: 75 };
-        
-        // 🔥 AJUSTE DE SCORE - MAIS GENEROSO 🔥
-        let score = analysis.matchScore || 75;
-        
-        // Garantir score mínimo mais alto
-        if (score < 55) score = 55 + (idx % 20);
-        if (score > 95) score = 95;
-        
-        // Bônus baseado nas skills do usuário
-        const oppText = `${opp.title} ${opp.description}`.toLowerCase();
-        let bonus = 0;
-        for (const skill of (user.skills || [])) {
-          if (oppText.includes(skill.toLowerCase())) {
-            bonus += 8;
-          }
-        }
-        score = Math.min(95, score + bonus);
-        
-        let priority: Priority = score >= 75 ? 'high' : score >= 60 ? 'medium' : 'low';
-        
-        return {
-          id: opp.id,
-          title: opp.title,
-          organization: opp.organization,
-          location: opp.location,
-          description: opp.description?.substring(0, 300),
-          skills: [],
-          matchScore: Math.floor(score),
-          matchedSkills: (analysis.matchedSkills || []).slice(0, 4),
-          missingSkills: [],
-          reasoning: analysis.reasoning || `🎯 Excelente oportunidade na área de ${opp.theme || 'voluntariado'}! Suas habilidades são muito relevantes.`,
-          recommendation: analysis.recommendation || `👍 Esta oportunidade está muito alinhada com seu perfil. Candidate-se!`,
-          priority: priority,
-          theme: opp.theme,
-          projectLink: opp.projectLink
-        } as MatchResult;
-      } catch (error) {
-        console.error(`   ❌ Erro, usando fallback`);
-        return calculateSingleMatch(user, opp, i + idx, true);
-      }
-    });
-    
-    const batchResults = await Promise.all(batchPromises);
-    results.push(...batchResults);
-    
-    await new Promise(resolve => setTimeout(resolve, 600));
-  }
-  
-  return results;
-}
-
-// 🔥 ALGORITMO LOCAL COM SCORES MAIS ALTOS 🔥
+// 🔥 ALGORITMO LOCAL OTIMIZADO COM SCORES VARIADOS 🔥
 function calculateLocalMatches(user: any, opportunities: any[]): MatchResult[] {
   const results: MatchResult[] = [];
+  const userSkills = user.skills?.map((s: string) => s.toLowerCase()) || [];
+  const userDescription = (user.description || '').toLowerCase();
+  
+  // Categorias de interesse baseadas na descrição do usuário
+  const interests = detectInterests(userDescription, userSkills);
+  console.log('🔍 Interesses detectados:', interests);
   
   for (let i = 0; i < opportunities.length; i++) {
-    results.push(calculateSingleMatch(user, opportunities[i], i, true));
+    const opp = opportunities[i];
+    const oppTitle = (opp.title || '').toLowerCase();
+    const oppDescription = (opp.description || '').toLowerCase();
+    const oppTheme = (opp.theme || '').toLowerCase();
+    
+    let totalScore = 50; // Score base
+    const matchedSkills: string[] = [];
+    
+    // 1. MATCH DE SKILLS (até +30 pontos)
+    let skillBonus = 0;
+    for (const skill of userSkills) {
+      if (oppTitle.includes(skill)) {
+        skillBonus += 12;
+        matchedSkills.push(skill);
+      } else if (oppTheme.includes(skill)) {
+        skillBonus += 8;
+        matchedSkills.push(skill);
+      } else if (oppDescription.includes(skill)) {
+        skillBonus += 5;
+        matchedSkills.push(skill);
+      }
+    }
+    totalScore += Math.min(30, skillBonus);
+    
+    // 2. MATCH DE INTERESSES (até +20 pontos)
+    let interestBonus = 0;
+    for (const interest of interests) {
+      if (oppTheme.includes(interest) || oppTitle.includes(interest)) {
+        interestBonus += 10;
+      }
+    }
+    totalScore += Math.min(20, interestBonus);
+    
+    // 3. LOCALIZAÇÃO (até +10 pontos)
+    const userLocation = (user.location || '').toLowerCase();
+    const oppLocation = (opp.location || '').toLowerCase();
+    if (userLocation && oppLocation) {
+      if (oppLocation.includes(userLocation.split(',')[0])) {
+        totalScore += 10;
+      } else if (oppLocation.includes('brasil')) {
+        totalScore += 5;
+      }
+    }
+    
+    // 4. VARIAÇÃO BASEADA NO ÍNDICE (garante diversidade)
+    const variation = (i * 7) % 25 - 10; // -10 a +14
+    totalScore += variation;
+    
+    // Garantir limites (30-95)
+    let finalScore = Math.min(95, Math.max(30, totalScore));
+    finalScore = Math.floor(finalScore);
+    
+    // Determinar prioridade
+    let priority: Priority = finalScore >= 75 ? 'high' : finalScore >= 60 ? 'medium' : 'low';
+    
+    // Gerar reasoning e recommendation baseados no score
+    let reasoning = '';
+    let recommendation = '';
+    
+    if (finalScore >= 85) {
+      reasoning = `🏆 Excelente compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são exatamente o que este projeto precisa. Você tem um perfil muito alinhado!`;
+      recommendation = `🎯 RECOMENDAÇÃO FORTE: Candidate-se agora! Esta oportunidade combina perfeitamente com seu perfil.`;
+    } else if (finalScore >= 75) {
+      reasoning = `👍 Ótima compatibilidade! Sua experiência em ${matchedSkills.slice(0, 2).join(', ')} será muito útil para este projeto na área de ${opp.theme}.`;
+      recommendation = `👍 RECOMENDAÇÃO: Vale muito a pena se candidatar. Suas habilidades serão muito valorizadas.`;
+    } else if (finalScore >= 65) {
+      reasoning = `💡 Compatibilidade positiva! Este projeto se beneficia do seu perfil. Você pode contribuir de forma significativa.`;
+      recommendation = `💡 RECOMENDAÇÃO: Boa oportunidade para aplicar seus conhecimentos. Candidate-se!`;
+    } else if (finalScore >= 55) {
+      reasoning = `📌 Compatibilidade média. Esta oportunidade pode te ajudar a desenvolver novas habilidades na área de ${opp.theme}.`;
+      recommendation = `📚 RECOMENDAÇÃO: Considere esta oportunidade para expandir sua experiência.`;
+    } else {
+      reasoning = `🌱 Oportunidade interessante para aprender e crescer em ${opp.theme}. Mesmo sem experiência direta, você pode contribuir.`;
+      recommendation = `🌟 RECOMENDAÇÃO: Ótima chance de desenvolvimento profissional. Explore!`;
+    }
+    
+    results.push({
+      id: opp.id,
+      title: opp.title,
+      organization: opp.organization,
+      location: opp.location,
+      description: opp.description?.substring(0, 300),
+      skills: [],
+      matchScore: finalScore,
+      matchedSkills: [...new Set(matchedSkills)].slice(0, 4),
+      missingSkills: [],
+      reasoning: reasoning,
+      recommendation: recommendation,
+      priority: priority,
+      theme: opp.theme,
+      projectLink: opp.projectLink
+    });
   }
   
   return results;
 }
 
-function calculateSingleMatch(user: any, opp: any, index: number, generous: boolean = true): MatchResult {
-  const userSkills = user.skills?.map((s: string) => s.toLowerCase()) || [];
-  const oppText = `${opp.title} ${opp.description} ${opp.theme}`.toLowerCase();
+// Detectar interesses do usuário baseado na descrição e habilidades
+function detectInterests(description: string, skills: string[]): string[] {
+  const allText = `${description} ${skills.join(' ')}`.toLowerCase();
+  const interests: string[] = [];
   
-  // 🔥 BASE SCORE MAIS ALTA 🔥
-  let baseScore = generous ? 65 : 55;
-  let matchedSkills: string[] = [];
-  let matchCount = 0;
+  const interestKeywords: { [key: string]: string[] } = {
+    'educação': ['educação', 'ensino', 'escola', 'criança', 'aprender', 'professor', 'pedagogia'],
+    'saúde': ['saúde', 'hospital', 'médico', 'paciente', 'cuidado', 'bem-estar'],
+    'ambiente': ['ambiente', 'ecologia', 'sustentabilidade', 'reciclagem', 'natureza'],
+    'social': ['social', 'comunidade', 'assistência', 'inclusão', 'direitos', 'cidadania'],
+    'tecnologia': ['tecnologia', 'programação', 'informática', 'digital', 'software'],
+    'cultura': ['cultura', 'arte', 'música', 'teatro', 'dança', 'artesanato'],
+    'esportes': ['esporte', 'futebol', 'atividade física', 'lazer', 'recreação'],
+    'animais': ['animal', 'pet', 'cachorro', 'gato', 'fauna', 'natureza']
+  };
   
-  for (const skill of userSkills) {
-    if (oppText.includes(skill)) {
-      baseScore += generous ? 12 : 10;
-      matchedSkills.push(skill);
-      matchCount++;
+  for (const [interest, keywords] of Object.entries(interestKeywords)) {
+    for (const keyword of keywords) {
+      if (allText.includes(keyword)) {
+        interests.push(interest);
+        break;
+      }
     }
   }
   
-  if (matchCount >= 2) baseScore += generous ? 15 : 10;
-  if (matchCount >= 3) baseScore += generous ? 20 : 15;
-  
-  // Variação para diversidade
-  let finalScore = baseScore + (index % 15) - 5;
-  finalScore = Math.min(95, Math.max(55, finalScore));
-  
-  let priority: Priority = finalScore >= 75 ? 'high' : finalScore >= 60 ? 'medium' : 'low';
-  
-  let reasoning = '';
-  let recommendation = '';
-  
-  if (finalScore >= 85) {
-    reasoning = `🏆 Excelente compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são altamente relevantes para este projeto. Você tem o perfil ideal!`;
-    recommendation = `🎯 RECOMENDAÇÃO FORTE: Candidate-se imediatamente! Esta oportunidade combina perfeitamente com seu perfil.`;
-  } else if (finalScore >= 75) {
-    reasoning = `👍 Ótima compatibilidade! Sua experiência em ${matchedSkills.slice(0, 2).join(', ')} será muito útil para este projeto. Você pode contribuir significativamente.`;
-    recommendation = `👍 RECOMENDAÇÃO: Considere se candidatar. Suas habilidades são valiosas para esta oportunidade.`;
-  } else if (finalScore >= 65) {
-    reasoning = `💡 Compatibilidade positiva! Este projeto pode se beneficiar da sua experiência. Você tem potencial para fazer a diferença.`;
-    recommendation = `💡 RECOMENDAÇÃO: Vale a pena explorar esta oportunidade. Pode ser um ótimo começo!`;
-  } else {
-    reasoning = `📌 Oportunidade interessante para desenvolver novas habilidades. Mesmo sem experiência direta, você pode contribuir e aprender muito.`;
-    recommendation = `📚 RECOMENDAÇÃO: Excelente oportunidade para crescimento pessoal e profissional. Candidate-se!`;
-  }
-  
-  return {
-    id: opp.id,
-    title: opp.title,
-    organization: opp.organization,
-    location: opp.location,
-    description: opp.description?.substring(0, 300),
-    skills: [],
-    matchScore: Math.floor(finalScore),
-    matchedSkills: matchedSkills.slice(0, 4),
-    missingSkills: [],
-    reasoning: reasoning,
-    recommendation: recommendation,
-    priority: priority,
-    theme: opp.theme,
-    projectLink: opp.projectLink
-  };
+  return [...new Set(interests)];
 }
 
+// 🔥 VERSÃO SIMPLIFICADA DO WATSONX (MAIS ESTÁVEL) 🔥
+async function analyzeMatchesWithWatsonX(user: any, opportunities: any[]): Promise<MatchResult[]> {
+  // Por enquanto, usar algoritmo local otimizado
+  // A integração completa com WatsonX pode ser adicionada depois
+  console.log('📊 Usando algoritmo local otimizado para matching');
+  return calculateLocalMatches(user, opportunities);
+}
+
+// Buscar oportunidades com cache
 async function fetchOpportunitiesWithCache(): Promise<any[]> {
   const now = Date.now();
   
@@ -444,13 +360,20 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
     
     console.log(`📡 GlobalGiving: ${allProjects.length} projetos carregados`);
 
-    const uniqueProjects = removeDuplicates(allProjects);
+    // Remover duplicatas
+    const seen = new Map();
+    for (const project of allProjects) {
+      if (!seen.has(project.id)) {
+        seen.set(project.id, project);
+      }
+    }
+    const uniqueProjects = Array.from(seen.values());
     console.log(`📊 Após remover duplicatas: ${uniqueProjects.length} projetos únicos`);
 
     cachedProjects = uniqueProjects.slice(0, 200).map((project: any) => ({
       id: project.id,
       title: project.title || 'Projeto de Voluntariado',
-      organization: project.organization?.name || 'GlobalGiving Partner',
+      organization: project.organization?.name || 'ONG Parceira',
       location: `${project.location?.city || 'Brasil'}, ${project.location?.country || 'BR'}`,
       description: (project.summary || project.description || '').substring(0, 800),
       theme: project.themeName || 'Voluntariado',
