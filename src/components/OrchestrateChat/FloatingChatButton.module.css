@@ -118,6 +118,7 @@
   gap: 8px;
   align-items: flex-start;
   max-width: 85%;
+  color: #2e2e2e;
 }
 
 .userMessage {
