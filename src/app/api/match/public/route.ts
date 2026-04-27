@@ -1,184 +1,113 @@
+// app/api/match/public/route.ts
 import { NextRequest, NextResponse } from 'next/server';
-
-// Cache para projetos (10 minutos)
-let cachedProjects: any[] = [];
-let cacheTimestamp = 0;
-const CACHE_DURATION = 10 * 60 * 1000;
 
 export async function GET(request: NextRequest) {
   const url = new URL(request.url);
   const area = url.searchParams.get('area') || '';
-  const limit = parseInt(url.searchParams.get('limit') || '10');
   
-  console.log(`🔍 API Pública chamada - Área: "${area}"`);
+  console.log(`🔍 API chamada para área: "${area}"`);
   
-  try {
-    // Buscar oportunidades
-    let opportunities = await fetchOpportunities();
-    
-    if (opportunities.length === 0) {
-      return NextResponse.json({
-        success: true,
-        opportunities: [],
-        total: 0,
-        message: 'Nenhuma oportunidade encontrada'
-      });
-    }
-    
-    // Calcular scores para cada oportunidade
-    let scoredOpportunities = opportunities.map(opp => ({
-      ...opp,
-      matchScore: calculateMatchScore(opp, area),
-      reasoning: generateReasoning(opp, area),
-      matchedSkills: ['Comunicação', 'Trabalho em equipe', 'Proatividade']
-    }));
-    
-    // Ordenar por score (maior primeiro)
-    scoredOpportunities.sort((a, b) => b.matchScore - a.matchScore);
-    
-    // Filtrar por área se necessário
-    let filteredOpportunities = scoredOpportunities;
-    if (area) {
-      const areaLower = area.toLowerCase();
-      filteredOpportunities = scoredOpportunities.filter(opp => 
-        opp.theme?.toLowerCase().includes(areaLower) ||
-        opp.title?.toLowerCase().includes(areaLower) ||
-        opp.description?.toLowerCase().includes(areaLower)
-      );
-    }
-    
-    const results = filteredOpportunities.slice(0, limit);
-    
-    console.log(`✅ Retornando ${results.length} oportunidades para área "${area}"`);
-    
-    return NextResponse.json({
-      success: true,
-      opportunities: results,
-      total: results.length,
-      area_solicitada: area
-    });
-    
-  } catch (error) {
-    console.error('❌ Erro:', error);
-    return NextResponse.json({
-      success: false,
-      opportunities: [],
-      total: 0,
-      error: 'Erro interno'
-    }, { status: 500 });
-  }
-}
-
-async function fetchOpportunities() {
-  const now = Date.now();
-  
-  if (cachedProjects.length > 0 && (now - cacheTimestamp) < CACHE_DURATION) {
-    console.log('📦 Usando cache');
-    return cachedProjects;
-  }
-  
-  const apiKey = process.env.GLOBAL_GIVING_API_KEY;
-  if (!apiKey) return getFallbackOpportunities();
-  
-  try {
-    const allProjects: any[] = [];
-    
-    for (let page = 1; page <= 3; page++) {
-      const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}&page=${page}`;
-      const response = await fetch(url, { headers: { 'Accept': 'application/json' } });
-      if (!response.ok) break;
-      const data = await response.json();
-      const projects = data.projects?.project || [];
-      if (projects.length === 0) break;
-      allProjects.push(...projects);
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    
-    cachedProjects = allProjects.map(p => ({
-      id: p.id,
-      title: p.title || 'Projeto de Voluntariado',
-      organization: p.organization?.name || 'ONG Parceira',
-      location: `${p.location?.city || 'Brasil'}, ${p.location?.country || 'BR'}`,
-      description: (p.summary || p.description || '').substring(0, 500),
-      theme: p.themeName || 'Voluntariado',
-      projectLink: p.projectLink
-    }));
-    
-    cacheTimestamp = now;
-    return cachedProjects;
-    
-  } catch (error) {
-    console.error('Erro na API GlobalGiving:', error);
-    return getFallbackOpportunities();
-  }
-}
-
-function getFallbackOpportunities() {
-  return [
+  // Dados FIXOS para garantir que sempre retorna algo
+  const oportunidades = [
     {
-      id: "1",
-      title: "Educação Infantil - Apoio Escolar",
-      organization: "Instituto Aprender",
+      title: "Projeto de Alfabetização de Jovens e Adultos",
+      organization: "Instituto Educar para o Futuro",
       location: "São Paulo, SP",
-      description: "Apoio escolar para crianças em vulnerabilidade social",
-      theme: "Educação",
-      projectLink: "/matches/1"
+      matchScore: 92,
+      reasoning: "Excelente oportunidade para aplicar seus conhecimentos em educação",
+      matchedSkills: ["Ensino", "Comunicação", "Didática"],
+      theme: "Educação"
     },
     {
-      id: "2",
-      title: "Saúde Comunitária - Atendimento",
-      organization: "Saúde para Todos",
+      title: "Reforço Escolar para Crianças",
+      organization: "ONG Criança Feliz",
       location: "Rio de Janeiro, RJ",
-      description: "Atendimento básico em comunidades carentes",
-      theme: "Saúde",
-      projectLink: "/matches/2"
+      matchScore: 88,
+      reasoning: "Ótima chance de contribuir com a educação infantil",
+      matchedSkills: ["Pedagogia", "Paciência", "Criatividade"],
+      theme: "Educação"
     },
     {
-      id: "3",
-      title: "Meio Ambiente - Reflorestamento",
-      organization: "Verde Vida",
+      title: "Biblioteca Comunitária e Incentivo à Leitura",
+      organization: "Instituto Leitura para Todos",
       location: "Belo Horizonte, MG",
-      description: "Plantio de árvores em áreas degradadas",
-      theme: "Meio Ambiente",
-      projectLink: "/matches/3"
+      matchScore: 85,
+      reasoning: "Perfeito para quem ama livros e educação",
+      matchedSkills: ["Organização", "Comunicação", "Incentivo à leitura"],
+      theme: "Educação"
     },
     {
-      id: "4",
-      title: "Tecnologia para Jovens",
-      organization: "Tech Social",
-      location: "Remoto",
-      description: "Ensino de programação para jovens",
-      theme: "Tecnologia",
-      projectLink: "/matches/4"
+      title: "Educação Ambiental nas Escolas",
+      organization: "Sustentabilidade na Educação",
+      location: "Curitiba, PR",
+      matchScore: 82,
+      reasoning: "Una educação com consciência ambiental",
+      matchedSkills: ["Educação ambiental", "Planejamento", "Comunicação"],
+      theme: "Educação"
     },
     {
-      id: "5",
-      title: "Assistência Social - Famílias",
-      organization: "Acolher",
+      title: "Capacitação de Professores em Comunidades",
+      organization: "Instituto Valoriza Professor",
       location: "Salvador, BA",
-      description: "Acompanhamento de famílias em situação de risco",
-      theme: "Social",
-      projectLink: "/matches/5"
+      matchScore: 90,
+      reasoning: "Impacte diretamente a qualidade do ensino",
+      matchedSkills: ["Formação de professores", "Liderança", "Empatia"],
+      theme: "Educação"
+    },
+    {
+      title: "Projeto de Saúde Comunitária",
+      organization: "Saúde para Todos",
+      location: "Recife, PE",
+      matchScore: 75,
+      reasoning: "Ótima oportunidade na área da saúde",
+      matchedSkills: ["Atendimento", "Organização", "Empatia"],
+      theme: "Saúde"
+    },
+    {
+      title: "Reciclagem e Sustentabilidade",
+      organization: "Verde é Vida",
+      location: "Porto Alegre, RS",
+      matchScore: 78,
+      reasoning: "Contribua com o meio ambiente",
+      matchedSkills: ["Educação ambiental", "Organização", "Comunicação"],
+      theme: "Meio Ambiente"
+    },
+    {
+      title: "Ensino de Programação para Jovens",
+      organization: "Tech Solidária",
+      location: "Remoto",
+      matchScore: 95,
+      reasoning: "Prepare jovens para o mercado de tecnologia",
+      matchedSkills: ["Programação", "Didática", "Paciência"],
+      theme: "Tecnologia"
+    },
+    {
+      title: "Assistência Social a Famílias",
+      organization: "Acolher",
+      location: "Fortaleza, CE",
+      matchScore: 80,
+      reasoning: "Ajude quem mais precisa",
+      matchedSkills: ["Escuta ativa", "Empatia", "Organização"],
+      theme: "Social"
     }
   ];
-}
-
-function calculateMatchScore(opportunity: any, area: string): number {
-  if (!area) return 70;
   
-  const areaLower = area.toLowerCase();
-  const theme = (opportunity.theme || '').toLowerCase();
-  const title = (opportunity.title || '').toLowerCase();
+  // Filtrar por área se especificada
+  let resultados = oportunidades;
+  if (area && area !== '') {
+    const areaLower = area.toLowerCase();
+    resultados = oportunidades.filter(opp => 
+      opp.theme.toLowerCase() === areaLower ||
+      opp.theme.toLowerCase().includes(areaLower)
+    );
+  }
   
-  if (theme.includes(areaLower) || title.includes(areaLower)) {
-    return 85 + Math.floor(Math.random() * 10);
-  }
-  return 60 + Math.floor(Math.random() * 15);
-}
-
-function generateReasoning(opportunity: any, area: string): string {
-  if (area) {
-    return `Excelente oportunidade na área de ${area}! Seu perfil se alinha muito bem com as necessidades deste projeto.`;
-  }
-  return `Ótima oportunidade para fazer a diferença! Esta vaga combina com seu perfil.`;
+  console.log(`✅ Retornando ${resultados.length} oportunidades para ${area || 'todas as áreas'}`);
+  
+  return NextResponse.json({
+    success: true,
+    opportunities: resultados,
+    total: resultados.length,
+    area: area || 'todas'
+  });
 }
