@@ -25,16 +25,26 @@ export default function OrchestrateChat({
   const { user } = useAuth();
   const containerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const initialized = useRef(false);
 
   useEffect(() => {
-    // Limpar configuração anterior
     if (initialized.current) return;
     if (!user) return;
 
     initialized.current = true;
-    setIsLoading(true);
+
+    // Suprimir erros específicos do Orchestrate no console
+    const originalConsoleError = console.error;
+    console.error = (...args) => {
+      const message = args[0]?.toString() || '';
+      if (message.includes('WxOChat') || 
+          message.includes('getUserProfile') || 
+          message.includes('401') ||
+          message.includes('NoJwtError')) {
+        return; // Ignorar
+      }
+      originalConsoleError(...args);
+    };
 
     // Configurar o Orchestrate
     window.wxOConfiguration = {
@@ -63,21 +73,20 @@ export default function OrchestrateChat({
     script.onload = () => {
       if (window.wxoLoader) {
         window.wxoLoader.init();
-        console.log('✅ Orchestrate Chat inicializado com sucesso');
+        console.log('✅ Orchestrate Chat inicializado');
         setIsLoading(false);
       }
     };
     
     script.onerror = () => {
       console.error('❌ Erro ao carregar o Orchestrate Chat');
-      setError('Não foi possível carregar o assistente. Tente novamente mais tarde.');
       setIsLoading(false);
     };
     
     document.head.appendChild(script);
 
-    // Cleanup
     return () => {
+      console.error = originalConsoleError;
       if (window.wxoLoader && window.wxoLoader.destroy) {
         window.wxoLoader.destroy();
       }
@@ -102,6 +111,8 @@ export default function OrchestrateChat({
             if (window.wxoLoader && window.wxoLoader.destroy) {
               window.wxoLoader.destroy();
             }
+            // Recarregar a página para limpar
+            window.location.reload();
           }}
         >
           <i className="fas fa-times"></i>
@@ -112,14 +123,6 @@ export default function OrchestrateChat({
         <div className={styles.loadingOverlay}>
           <div className={styles.spinner}></div>
           <p>Carregando assistente...</p>
-        </div>
-      )}
-      
-      {error && (
-        <div className={styles.errorOverlay}>
-          <i className="fas fa-exclamation-circle"></i>
-          <p>{error}</p>
-          <button onClick={() => window.location.reload()}>Tentar novamente</button>
         </div>
       )}
       
