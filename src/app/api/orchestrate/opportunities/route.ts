@@ -5,90 +5,66 @@ export async function GET(request: NextRequest) {
   const area = request.nextUrl.searchParams.get('area') || '';
   const limit = parseInt(request.nextUrl.searchParams.get('limit') || '5');
   
-  console.log(`🔧 Orchestrate buscando oportunidades para: ${area || 'todas'}`);
+  console.log(`🔧 [Orchestrate] Buscando oportunidades para área: "${area}"`);
   
   try {
-    // Buscar da sua API existente
+    // Buscar oportunidades da sua API real
     const response = await fetch(`${process.env.NEXT_PUBLIC_APP_URL}/api/match`, {
       headers: {
-        'Content-Type': 'application/json',
-        'X-Internal-Key': process.env.INTERNAL_API_KEY || 'orchestrate-key'
+        'Content-Type': 'application/json'
       }
     });
     
     if (!response.ok) {
-      console.error(`API respondeu com erro: ${response.status}`);
-      // Fallback: retornar dados mock para não quebrar o chat
-      return getMockResponse(area, limit);
+      console.error(`❌ API respondeu com erro: ${response.status}`);
+      return NextResponse.json({
+        success: false,
+        error: `API respondeu com status ${response.status}`
+      }, { status: response.status });
     }
     
     const data = await response.json();
     let matches = data.matches || [];
     
-    // Filtrar por área
+    console.log(`📦 Total de matches da API: ${matches.length}`);
+    
+    // Filtrar por área se especificada
     if (area) {
       const areaLower = area.toLowerCase();
-      matches = matches.filter((m: any) => 
-        m.theme?.toLowerCase().includes(areaLower) ||
-        m.title?.toLowerCase().includes(areaLower)
-      );
+      matches = matches.filter((match: any) => {
+        const theme = (match.theme || '').toLowerCase();
+        const title = (match.title || '').toLowerCase();
+        const description = (match.description || '').toLowerCase();
+        
+        return theme.includes(areaLower) || 
+               title.includes(areaLower) || 
+               description.includes(areaLower);
+      });
+      console.log(`🎯 Filtrados ${matches.length} matches para área "${area}"`);
     }
     
-    const formatted = matches.slice(0, limit).map((m: any) => ({
-      titulo: m.title,
-      organizacao: m.organization,
-      localizacao: m.location,
-      compatibilidade: `${m.matchScore}%`,
-      razao: m.reasoning
+    // Formatar resposta
+    const formattedMatches = matches.slice(0, limit).map((match: any) => ({
+      titulo: match.title,
+      organizacao: match.organization,
+      localizacao: match.location,
+      compatibilidade: `${match.matchScore}%`,
+      razao: match.reasoning || `Compatível com seu interesse em ${area || 'voluntariado'}`,
+      habilidades: match.matchedSkills || []
     }));
     
     return NextResponse.json({
       success: true,
-      oportunidades: formatted,
-      total_encontrado: matches.length
+      oportunidades: formattedMatches,
+      total_encontrado: matches.length,
+      area_solicitada: area
     });
     
   } catch (error) {
-    console.error('Erro:', error);
-    return getMockResponse(area, limit);
+    console.error('❌ Erro ao buscar oportunidades:', error);
+    return NextResponse.json({
+      success: false,
+      error: 'Erro interno ao buscar oportunidades'
+    }, { status: 500 });
   }
-}
-
-// Função de fallback com dados reais
-function getMockResponse(area: string, limit: number) {
-  const mockData = [
-    {
-      titulo: `Projeto de Sustentabilidade e Educação Ambiental`,
-      organizacao: "Instituto EcoVida",
-      localizacao: "São Paulo, SP",
-      compatibilidade: "85%",
-      razao: "Seu perfil está muito alinhado com esta oportunidade na área ambiental"
-    },
-    {
-      titulo: "Reciclagem e Conscientização Comunitária",
-      organizacao: "ONG Reciclar para o Futuro",
-      localizacao: "Rio de Janeiro, RJ",
-      compatibilidade: "78%",
-      razao: "Boa compatibilidade com seu interesse em meio ambiente"
-    },
-    {
-      titulo: "Reflorestamento e Proteção de Nascentes",
-      organizacao: "Verde é Vida",
-      localizacao: "Belo Horizonte, MG",
-      compatibilidade: "72%",
-      razao: "Ótima oportunidade para aplicar seus conhecimentos"
-    }
-  ];
-  
-  // Filtrar por área se necessário
-  let resultados = mockData;
-  if (area && area !== 'todas') {
-    resultados = mockData;
-  }
-  
-  return NextResponse.json({
-    success: true,
-    oportunidades: resultados.slice(0, limit),
-    total_encontrado: resultados.length
-  });
 }
