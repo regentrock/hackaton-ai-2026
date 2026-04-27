@@ -345,7 +345,7 @@ function calculateSingleMatch(user: any, opp: any, index: number, generous: bool
   const oppText = `${opp.title} ${opp.description} ${opp.theme}`.toLowerCase();
   
   // 🔥 BASE SCORE MAIS ALTA 🔥
-  let baseScore = generous ? 65 : 55;
+  let baseScore = generous ? 75 : 65;
   let matchedSkills: string[] = [];
   let matchCount = 0;
   
