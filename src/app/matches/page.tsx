@@ -1,9 +1,10 @@
+// page.tsx
 'use client';
 
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import styles from './page.module.css'; 
+import styles from './page.module.css';
 import '@fortawesome/fontawesome-free/css/all.min.css';
 
 interface Match {
@@ -43,7 +44,6 @@ export default function MatchesPage() {
   const [moreMatches, setMoreMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [usingAI, setUsingAI] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [moreFilter, setMoreFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [savingId, setSavingId] = useState<string | null>(null);
@@ -99,20 +99,17 @@ export default function MatchesPage() {
       
       if (data.success) {
         const matches = data.matches || [];
-        
-        // USAR O SCORE QUE VEIO DO BACKEND, não recalcular
         const sortedMatches = [...matches].sort((a, b) => b.matchScore - a.matchScore);
         
-        console.log('📊 Matches com scores:', sortedMatches.map(m => ({ title: m.title.substring(0, 30), score: m.matchScore })));
+        console.log('Matches com scores:', sortedMatches.map(m => ({ title: m.title.substring(0, 30), score: m.matchScore })));
         
         setAllMatches(sortedMatches);
         setTopMatches(sortedMatches.slice(0, 6));
         setMoreMatches(sortedMatches.slice(6));
-        setUsingAI(data.usingAI || false);
       }
       
     } catch (err: any) {
-      console.error('❌ Error fetching matches:', err);
+      console.error('Error fetching matches:', err);
       setError(err.message || 'Erro ao carregar oportunidades');
     } finally {
       setLoading(false);
@@ -147,7 +144,6 @@ export default function MatchesPage() {
       if (data.success) {
         setSavedOpportunities(prev => new Set(prev).add(match.id));
         
-        // Feedback visual temporário
         const button = document.getElementById(`save-btn-${match.id}`);
         if (button) {
           const originalHtml = button.innerHTML;
@@ -164,7 +160,7 @@ export default function MatchesPage() {
         alert('Erro ao salvar: ' + (data.error || 'Tente novamente'));
       }
     } catch (error) {
-      console.error('❌ Error saving opportunity:', error);
+      console.error('Error saving opportunity:', error);
       alert('Erro ao salvar oportunidade. Tente novamente.');
     } finally {
       setSavingId(null);
@@ -225,8 +221,8 @@ export default function MatchesPage() {
     return (
       <div className={styles.loadingContainer}>
         <div className={styles.spinner}></div>
-        <p>Analisando oportunidades com IA WatsonX...</p>
-        <p className={styles.subLoading}>Isso pode levar alguns segundos</p>
+        <p>Carregando oportunidades...</p>
+        <p className={styles.subLoading}>Analisando seu perfil</p>
       </div>
     );
   }
@@ -252,86 +248,69 @@ export default function MatchesPage() {
     <div className={styles.pageContainer}>
       <div className={styles.container}>
 
-        {/* Header */}
         <div className={styles.header}>
           <div className={styles.headerContent}>
-            <div className={styles.eyebrow}>Oportunidades para você</div>
+            <div className={styles.eyebrow}>Oportunidades personalizadas</div>
             <h1 className={styles.title}>
-              Seu painel de matches
-              <span className={styles.titleHighlight}>baseado no seu perfil e habilidades</span>
+              Oportunidades para você
+              <span className={styles.titleHighlight}>selecionadas com base no seu perfil</span>
             </h1>
             <p className={styles.subtitle}>
-              Nossa IA analisou seu perfil e selecionou as melhores oportunidades com base nas suas competências.
+              Análise inteligente das melhores oportunidades alinhadas às suas habilidades e objetivos.
             </p>
           </div>
-          {usingAI && (
-            <div className={styles.aiBadge}>
-              <i className="fas fa-brain"></i>
-              <span>Match por IA WatsonX</span>
-            </div>
-          )}
         </div>
 
-        {/* User Skills */}
         {user.skills && user.skills.length > 0 && (
-          <div className={styles.skillsSection}>
-            <div className={styles.skillsHeader}>
-              <i className="fas fa-code"></i>
-              <span>Suas habilidades</span>
-            </div>
-            <div className={styles.skillsDivider}></div>
-            <div className={styles.skillsList}>
-              {user.skills.map((skill: string, i: number) => (
-                <span key={i} className={styles.skillTag}>{skill}</span>
-              ))}
+          <div className={styles.skillsWrapper}>
+            <div className={styles.skillsBadge}>
+              <i className="fas fa-user-check"></i>
+              <span>{user.skills.slice(0, 5).join(' • ')}{user.skills.length > 5 && ` • +${user.skills.length - 5}`}</span>
             </div>
           </div>
         )}
 
-        {/* Stats Row */}
         {topMatches.length > 0 && (
           <div className={styles.statsRow}>
             {highCount > 0 && (
               <div className={styles.statPill}>
                 <span className={`${styles.statDot} ${styles.high}`}></span>
                 <strong>{highCount}</strong>
-                <span>alta compatibilidade</span>
+                <span>Alta compatibilidade</span>
               </div>
             )}
             {mediumCount > 0 && (
               <div className={styles.statPill}>
                 <span className={`${styles.statDot} ${styles.medium}`}></span>
                 <strong>{mediumCount}</strong>
-                <span>compatibilidade média</span>
+                <span>Compatibilidade média</span>
               </div>
             )}
             {lowCount > 0 && (
               <div className={styles.statPill}>
                 <span className={`${styles.statDot} ${styles.low}`}></span>
                 <strong>{lowCount}</strong>
-                <span>em desenvolvimento</span>
+                <span>Potencial de desenvolvimento</span>
               </div>
             )}
           </div>
         )}
 
-        {/* Filtros para Top Matches */}
         <div className={styles.filtersBar}>
           <button 
             onClick={() => setActiveFilter('all')}
             className={`${styles.filterBtn} ${activeFilter === 'all' ? styles.active : ''}`}
           >
-            Todos
-            <span className={styles.filterCount}>{topMatches.length}</span>
+            <i className="fas fa-th-large"></i>
+            Todas
           </button>
           {highCount > 0 && (
             <button 
               onClick={() => setActiveFilter('high')}
               className={`${styles.filterBtn} ${activeFilter === 'high' ? styles.active : ''}`}
             >
-              <i className="fas fa-star"></i>
+              <i className="fas fa-chart-line"></i>
               Alta compatibilidade
-              <span className={styles.filterCount}>{highCount}</span>
             </button>
           )}
           {mediumCount > 0 && (
@@ -339,9 +318,8 @@ export default function MatchesPage() {
               onClick={() => setActiveFilter('medium')}
               className={`${styles.filterBtn} ${activeFilter === 'medium' ? styles.active : ''}`}
             >
-              <i className="fas fa-chart-line"></i>
+              <i className="fas fa-chart-simple"></i>
               Média compatibilidade
-              <span className={styles.filterCount}>{mediumCount}</span>
             </button>
           )}
           {lowCount > 0 && (
@@ -349,14 +327,12 @@ export default function MatchesPage() {
               onClick={() => setActiveFilter('low')}
               className={`${styles.filterBtn} ${activeFilter === 'low' ? styles.active : ''}`}
             >
-              <i className="fas fa-graduation-cap"></i>
-              Desenvolvimento
-              <span className={styles.filterCount}>{lowCount}</span>
+              <i className="fas fa-seedling"></i>
+              Em desenvolvimento
             </button>
           )}
         </div>
 
-        {/* Top Matches - Grid */}
         {filteredTopMatches.length === 0 ? (
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>
@@ -369,104 +345,107 @@ export default function MatchesPage() {
             </button>
           </div>
         ) : (
-          <div className={styles.cardsGrid}>
-            {filteredTopMatches.map((match) => {
-              const saved = isSaved(match.id);
-              return (
-                <div key={match.id} className={`${styles.matchCard} ${getPriorityClass(match.matchScore)}`}>
-                  <div className={styles.cardStripe}></div>
-                  <div className={styles.cardInner}>
-                    <div className={styles.cardHeader}>
-                      <div className={styles.cardHeaderLeft}>
-                        <div className={styles.organizationIcon}>
-                          <i className="fas fa-building"></i>
+          <>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>Melhores opções para você</h2>
+              <span className={styles.sectionCount}>{filteredTopMatches.length} oportunidades</span>
+            </div>
+            <div className={styles.cardsGrid}>
+              {filteredTopMatches.map((match) => {
+                const saved = isSaved(match.id);
+                return (
+                  <div key={match.id} className={`${styles.matchCard} ${getPriorityClass(match.matchScore)}`}>
+                    <div className={styles.cardStripe}></div>
+                    <div className={styles.cardInner}>
+                      <div className={styles.cardHeader}>
+                        <div className={styles.cardHeaderLeft}>
+                          <div className={styles.organizationIcon}>
+                            <i className="fas fa-briefcase"></i>
+                          </div>
+                          <div className={styles.cardTitleGroup}>
+                            <h3 className={styles.cardTitle}>{match.title}</h3>
+                            <p className={styles.organization}>{match.organization}</p>
+                          </div>
                         </div>
-                        <div className={styles.cardTitleGroup}>
-                          <h3 className={styles.cardTitle}>{match.title}</h3>
-                          <p className={styles.organization}>{match.organization}</p>
+                        <div className={`${styles.scoreBadge} ${getScoreClass(match.matchScore)}`}>
+                          <span className={styles.scoreValue}>{match.matchScore}%</span>
+                          <span className={styles.scoreLabel}>match</span>
                         </div>
                       </div>
-                      <div className={`${styles.scoreBadge} ${getScoreClass(match.matchScore)}`}>
-                        <span className={styles.scoreValue}>{match.matchScore}%</span>
-                        <span className={styles.scoreLabel}>match</span>
-                      </div>
-                    </div>
 
-                    <div className={styles.cardMeta}>
-                      <span className={styles.metaItem}>
-                        <i className="fas fa-map-marker-alt"></i>
-                        {match.location}
-                      </span>
-                      {match.theme && (
+                      <div className={styles.cardMeta}>
                         <span className={styles.metaItem}>
-                          <i className="fas fa-tag"></i>
-                          {match.theme}
+                          <i className="fas fa-map-marker-alt"></i>
+                          {match.location}
                         </span>
+                        {match.theme && (
+                          <span className={styles.metaItem}>
+                            {match.theme}
+                          </span>
+                        )}
+                      </div>
+
+                      <p className={styles.cardDescription}>{match.description?.substring(0, 120)}...</p>
+
+                      {match.matchedSkills && match.matchedSkills.length > 0 && (
+                        <div className={styles.sectionBlock}>
+                          <div className={styles.sectionTitle}>
+                            <span>Habilidades que combinam</span>
+                          </div>
+                          <div className={styles.skillsGroup}>
+                            {match.matchedSkills.slice(0, 3).map((skill, i) => (
+                              <span key={i} className={styles.skill}>{skill}</span>
+                            ))}
+                          </div>
+                        </div>
                       )}
-                    </div>
 
-                    <p className={styles.cardDescription}>{match.description?.substring(0, 120)}...</p>
-
-                    {match.matchedSkills && match.matchedSkills.length > 0 && (
-                      <div className={styles.sectionBlock}>
-                        <div className={styles.sectionTitle}>
-                          <i className="fas fa-check-circle"></i>
-                          <span>Habilidades que combinam</span>
+                      <div className={styles.cardInfo}>
+                        <div className={styles.reasoningBlock}>
+                          <p>{match.reasoning}</p>
                         </div>
-                        <div className={styles.skillsGroup}>
-                          {match.matchedSkills.slice(0, 3).map((skill, i) => (
-                            <span key={i} className={`${styles.skill} ${styles.skillMatch}`}>{skill}</span>
-                          ))}
+                        <div className={styles.recommendationBlock}>
+                          <i className="fas fa-lightbulb"></i>
+                          <div>
+                            <strong>Recomendação</strong>
+                            <p>{match.recommendation}</p>
+                          </div>
                         </div>
                       </div>
-                    )}
 
-                    <div className={styles.reasoningBlock}>
-                      <i className="fas fa-quote-left"></i>
-                      <p>{match.reasoning}</p>
-                    </div>
-
-                    <div className={styles.recommendationBlock}>
-                      <i className="fas fa-gem"></i>
-                      <div>
-                        <strong>Recomendação</strong>
-                        <p>{match.recommendation}</p>
+                      <div className={styles.actionButtons}>
+                        <button 
+                          id={`save-btn-${match.id}`}
+                          onClick={() => handleSaveOpportunity(match)}
+                          disabled={savingId === match.id}
+                          className={`${styles.interestButton} ${saved ? styles.saved : ''}`}
+                        >
+                          <i className={`fas ${saved ? 'fa-check' : 'fa-heart'}`}></i>
+                          {savingId === match.id ? 'Salvando...' : (saved ? 'Salvo' : 'Tenho interesse')}
+                        </button>
+                        <button 
+                          onClick={() => router.push(`/matches/${match.id}`)}
+                          className={styles.detailsButton}
+                        >
+                          <span>Ver detalhes</span>
+                          <i className="fas fa-arrow-right"></i>
+                        </button>
                       </div>
-                    </div>
-
-                    <div className={styles.actionButtons}>
-                      <button 
-                        id={`save-btn-${match.id}`}
-                        onClick={() => handleSaveOpportunity(match)}
-                        disabled={savingId === match.id}
-                        className={`${styles.interestButton} ${saved ? styles.saved : ''}`}
-                      >
-                        <i className={`fas ${saved ? 'fa-check' : 'fa-heart'}`}></i>
-                        {savingId === match.id ? 'Salvando...' : (saved ? 'Salvo' : 'Tenho interesse')}
-                      </button>
-                      <button 
-                        onClick={() => router.push(`/matches/${match.id}`)}
-                        className={styles.detailsButton}
-                      >
-                        <i className="fas fa-arrow-right"></i>
-                        Mais detalhes
-                      </button>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </>
         )}
 
-        {/* Mais Oportunidades - Seção com Filtros */}
         {moreMatches.length > 0 && (
           <div className={styles.moreSection}>
             <div className={styles.moreSectionHeader}>
               <div className={styles.moreSectionTitle}>
                 <i className="fas fa-compass"></i>
-                <h2 className={styles.sectionSubtitle}>Mais oportunidades para explorar</h2>
-                <span className={styles.totalCount}>{moreTotal} oportunidades</span>
+                <h2 className={styles.sectionSubtitle}>Explorar mais oportunidades</h2>
+                <span className={styles.totalCount}>{moreTotal} oportunidades disponíveis</span>
               </div>
               
               <div className={styles.moreControls}>
@@ -477,25 +456,25 @@ export default function MatchesPage() {
                       onClick={() => setMoreFilter('all')}
                       className={`${styles.chip} ${moreFilter === 'all' ? styles.active : ''}`}
                     >
-                      Todos
+                      Todos ({moreTotal})
                     </button>
                     <button 
                       onClick={() => setMoreFilter('high')}
                       className={`${styles.chip} ${moreFilter === 'high' ? styles.active : ''}`}
                     >
-                      <i className="fas fa-star"></i> Alta
+                      <i className="fas fa-chart-line"></i> Alta
                     </button>
                     <button 
                       onClick={() => setMoreFilter('medium')}
                       className={`${styles.chip} ${moreFilter === 'medium' ? styles.active : ''}`}
                     >
-                      <i className="fas fa-chart-line"></i> Média
+                      <i className="fas fa-chart-simple"></i> Média
                     </button>
                     <button 
                       onClick={() => setMoreFilter('low')}
                       className={`${styles.chip} ${moreFilter === 'low' ? styles.active : ''}`}
                     >
-                      <i className="fas fa-graduation-cap"></i> Baixa
+                      <i className="fas fa-seedling"></i> Baixa
                     </button>
                   </div>
                 </div>
@@ -514,7 +493,7 @@ export default function MatchesPage() {
                           <span className={styles.moreScoreValue}>{match.matchScore}%</span>
                         </div>
                         <div className={styles.moreCardIcon}>
-                          <i className="fas fa-building"></i>
+                          <i className="fas fa-briefcase"></i>
                         </div>
                       </div>
                       <h4 className={styles.moreCardTitle}>{match.title}</h4>
@@ -544,13 +523,9 @@ export default function MatchesPage() {
               })}
             </div>
             
-            {/* Botão Carregar Mais */}
             {hasMoreToShow() && (
               <div className={styles.loadMoreContainer}>
-                <button 
-                  onClick={loadMore} 
-                  className={styles.loadMoreButton}
-                >
+                <button onClick={loadMore} className={styles.loadMoreButton}>
                   <i className="fas fa-arrow-down"></i>
                   Carregar mais oportunidades
                 </button>

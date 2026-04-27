@@ -298,28 +298,28 @@ function generateReasoningText(score: number, matchedSkills: string[], title: st
     return `🏆 Excelente! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são muito relevantes para "${shortTitle}".`;
   } else if (score >= 60) {
     if (matchedSkills.length > 0) {
-      return `👍 Ótima compatibilidade! Sua experiência em ${matchedSkills.slice(0, 2).join(', ')} será muito útil para este projeto.`;
+      return `Ótima compatibilidade! Sua experiência em ${matchedSkills.slice(0, 2).join(', ')} será muito útil para este projeto.`;
     }
-    return `👍 Boa compatibilidade! Este projeto está bem alinhado com seu perfil.`;
+    return `Boa compatibilidade! Este projeto está bem alinhado com seu perfil.`;
   } else if (score >= 45) {
-    return `💡 Compatibilidade positiva! Você pode contribuir de forma significativa para este projeto.`;
+    return `Compatibilidade positiva! Você pode contribuir de forma significativa para este projeto.`;
   } else {
-    return `📌 Oportunidade interessante para desenvolver novas habilidades e fazer a diferença.`;
+    return `Oportunidade interessante para desenvolver novas habilidades e fazer a diferença.`;
   }
 }
 
 // Gerar texto de recomendação
 function generateRecommendationText(score: number, matchedSkills: string[]): string {
   if (score >= 75) {
-    return `🎯 RECOMENDAÇÃO FORTE: Candidate-se! Excelente alinhamento com seu perfil.`;
+    return `RECOMENDAÇÃO FORTE: Candidate-se! Excelente alinhamento com seu perfil.`;
   } else if (score >= 60) {
     if (matchedSkills.length > 0) {
-      return `👍 RECOMENDAÇÃO: Considere se candidatar. Suas habilidades são valiosas para esta oportunidade.`;
+      return `RECOMENDAÇÃO: Considere se candidatar. Suas habilidades são valiosas para esta oportunidade.`;
     }
-    return `👍 RECOMENDAÇÃO: Boa oportunidade para aplicar seus conhecimentos.`;
+    return `RECOMENDAÇÃO: Boa oportunidade para aplicar seus conhecimentos.`;
   } else if (score >= 45) {
-    return `💡 RECOMENDAÇÃO: Vale a pena explorar esta oportunidade.`;
+    return `RECOMENDAÇÃO: Vale a pena explorar esta oportunidade.`;
   } else {
-    return `📚 RECOMENDAÇÃO: Ótima oportunidade para aprendizado e crescimento.`;
+    return `RECOMENDAÇÃO: Ótima oportunidade para aprendizado e crescimento.`;
   }
 }
