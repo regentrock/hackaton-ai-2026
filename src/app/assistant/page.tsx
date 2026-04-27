@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/src/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import styles from './assistant.module.css';
+import styles from './page.module.css';
 
 declare global {
   interface Window {
