@@ -1,4 +1,4 @@
-// app/api/match/route.ts - VERSÃO CORRIGIDA COM SCORES VARIADOS
+// app/api/match/route.ts - VERSÃO OTIMIZADA COMPLETA
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/src/lib/auth/authUtils';
 
@@ -19,16 +19,20 @@ interface MatchResult {
   projectLink?: string;
 }
 
-// Cache para projetos (10 minutos)
+// Cache para projetos (5 minutos para atualizar mais rápido)
 let cachedProjects: any[] = [];
 let cacheTimestamp = 0;
-const CACHE_DURATION = 10 * 60 * 1000;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutos
+
+// Cache de sessão do usuário para evitar repetição
+let userSessionCache: Map<string, { timestamp: number, seenIds: Set<string> }> = new Map();
 
 export async function GET(request: NextRequest) {
   const startTime = Date.now();
   console.log('\n🚀 ========== MATCH API INICIADA ==========');
   
   try {
+    // 1. Autenticação
     let token = request.cookies.get('auth_token')?.value;
     
     if (!token) {
@@ -47,6 +51,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
     }
 
+    // 2. Buscar perfil completo do usuário
     const { prisma } = await import('@/src/lib/prisma');
     
     const user = await prisma.volunteer.findUnique({
@@ -69,9 +74,12 @@ export async function GET(request: NextRequest) {
 
     console.log('👤 Usuário:', user.name);
     console.log('🎯 Skills:', user.skills);
-    console.log('📝 Sobre:', user.description?.substring(0, 100) || 'Não informado');
+    console.log('📝 Sobre:', user.description?.substring(0, 200) || 'Não informado');
+    console.log('📍 Localização:', user.location);
+    console.log('⏰ Disponibilidade:', user.availability);
 
-    let opportunities = await fetchOpportunitiesWithCache();
+    // 3. Buscar MAIS oportunidades (escopo maior)
+    let opportunities = await fetchAllOpportunities();
     
     if (opportunities.length === 0) {
       return NextResponse.json({
@@ -81,23 +89,51 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    console.log(`📦 Total de oportunidades: ${opportunities.length}`);
+    console.log(`📦 ${opportunities.length} oportunidades disponíveis para análise`);
 
-    // Calcular matches com SCORES VARIADOS
-    const matches = calculateMatchesWithVariedScores(user, opportunities);
-
-    matches.sort((a, b) => b.matchScore - a.matchScore);
+    // 4. Aplicar filtro de localização preferencial (opcional)
+    let filteredOpportunities = opportunities;
     
-    console.log('📊 TOP 10 SCORES:');
-    matches.slice(0, 10).forEach((m, i) => {
-      console.log(`  ${i+1}. ${m.matchScore}% - ${m.title.substring(0, 45)}...`);
-      console.log(`     Skills match: ${m.matchedSkills.slice(0, 2).join(', ')}`);
+    // Se usuário tem localização, priorizar projetos do Brasil
+    if (user.location && user.location.length > 0) {
+      const brazilProjects = opportunities.filter(opp => 
+        opp.location.toLowerCase().includes('brasil') || 
+        opp.location.toLowerCase().includes('br')
+      );
+      if (brazilProjects.length > 0) {
+        console.log(`📍 Priorizando ${brazilProjects.length} projetos no Brasil`);
+        // Colocar projetos do Brasil no início
+        filteredOpportunities = [...brazilProjects, ...opportunities.filter(opp => !brazilProjects.includes(opp))];
+      }
+    }
+
+    // 5. Calcular matches com algoritmo avançado
+    const allMatches = calculateAdvancedMatches(user, filteredOpportunities);
+
+    // 6. Ordenar por score
+    allMatches.sort((a, b) => b.matchScore - a.matchScore);
+
+    // 7. Separar por categorias
+    const highMatches = allMatches.filter(m => m.matchScore >= 70);
+    const mediumMatches = allMatches.filter(m => m.matchScore >= 45 && m.matchScore < 70);
+    const lowMatches = allMatches.filter(m => m.matchScore < 45);
+
+    console.log('\n📊 RESULTADOS DO MATCHING:');
+    console.log(`   🔥 Alta compatibilidade (70-100%): ${highMatches.length}`);
+    console.log(`   📌 Média compatibilidade (45-69%): ${mediumMatches.length}`);
+    console.log(`   🌱 Baixa compatibilidade (0-44%): ${lowMatches.length}`);
+    
+    console.log('\n🏆 TOP 10 MATCHES:');
+    allMatches.slice(0, 10).forEach((m, i) => {
+      console.log(`   ${i+1}. ${m.matchScore}% - ${m.title.substring(0, 50)}...`);
+      console.log(`      Skills: ${m.matchedSkills.slice(0, 3).join(', ')}`);
     });
 
+    // 8. Retornar todos os matches (até 60)
     return NextResponse.json({
       success: true,
-      matches: matches.slice(0, 40),
-      total: matches.length,
+      matches: allMatches.slice(0, 60),
+      total: allMatches.length,
       userSkills: user.skills || [],
       executionTimeMs: Date.now() - startTime,
       usingAI: true
@@ -112,11 +148,12 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function fetchOpportunitiesWithCache(): Promise<any[]> {
+// Buscar TODAS as oportunidades disponíveis
+async function fetchAllOpportunities(): Promise<any[]> {
   const now = Date.now();
   
   if (cachedProjects.length > 0 && (now - cacheTimestamp) < CACHE_DURATION) {
-    console.log('📦 Usando cache de projetos');
+    console.log(`📦 Cache ativo (${Math.round((now - cacheTimestamp) / 1000)}s) - ${cachedProjects.length} projetos`);
     return cachedProjects;
   }
   
@@ -130,7 +167,10 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
   try {
     const allProjects: any[] = [];
     
-    for (let page = 1; page <= 5; page++) {
+    // Buscar até 10 páginas para ter MAIS oportunidades
+    console.log('🌍 Buscando oportunidades da GlobalGiving...');
+    
+    for (let page = 1; page <= 10; page++) {
       const url = `https://api.globalgiving.org/api/public/projectservice/countries/BR/projects/active?api_key=${apiKey}&page=${page}`;
       
       const response = await fetch(url, {
@@ -138,33 +178,39 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
         cache: 'no-store'
       });
 
-      if (!response.ok) break;
+      if (!response.ok) {
+        console.log(`⚠️ Página ${page}: erro ${response.status}`);
+        break;
+      }
 
       const data = await response.json();
       const projects = data.projects?.project || [];
       
-      if (projects.length === 0) break;
+      if (projects.length === 0) {
+        console.log(`📄 Página ${page}: sem projetos, encerrando`);
+        break;
+      }
       
       allProjects.push(...projects);
-      console.log(`📄 Página ${page}: +${projects.length} projetos`);
+      console.log(`📄 Página ${page}: +${projects.length} projetos (total: ${allProjects.length})`);
+      
+      // Pequeno delay para não sobrecarregar a API
+      await new Promise(resolve => setTimeout(resolve, 100));
     }
     
     console.log(`📡 GlobalGiving: ${allProjects.length} projetos carregados`);
 
-    const shuffled = [...allProjects];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-
-    cachedProjects = shuffled.map((project: any) => ({
+    // Mapear e enriquecer os dados
+    cachedProjects = allProjects.map((project: any) => ({
       id: project.id,
       title: project.title || 'Projeto de Voluntariado',
       organization: project.organization?.name || 'GlobalGiving Partner',
       location: `${project.location?.city || 'Brasil'}, ${project.location?.country || 'BR'}`,
-      description: (project.summary || project.description || '').substring(0, 500),
+      description: (project.summary || project.description || '').substring(0, 800),
       theme: project.themeName || 'Voluntariado',
-      projectLink: project.projectLink
+      projectLink: project.projectLink,
+      // Extrair palavras-chave do título
+      keywords: extractProjectKeywords(project.title || '')
     }));
     
     cacheTimestamp = now;
@@ -177,46 +223,64 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
   }
 }
 
-// NOVA FUNÇÃO: Calcula scores com maior variação
-function calculateMatchesWithVariedScores(user: any, opportunities: any[]): MatchResult[] {
-  const userSkills = user.skills?.map((s: string) => s.toLowerCase()) || [];
+// Extrair palavras-chave do projeto
+function extractProjectKeywords(title: string): string[] {
+  const words = title.toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .split(/\s+/)
+    .filter(w => w.length > 3);
+  return [...new Set(words)].slice(0, 10);
+}
+
+// ALGORITMO AVANÇADO DE MATCHING
+function calculateAdvancedMatches(user: any, opportunities: any[]): MatchResult[] {
+  const userSkills = user.skills?.map((s: string) => s.toLowerCase().trim()) || [];
   const userDescription = (user.description || '').toLowerCase();
   const userLocation = (user.location || '').toLowerCase();
   const userAvailability = (user.availability || '').toLowerCase();
   
-  const results: MatchResult[] = [];
+  // Analisar perfil do usuário profundamente
+  const userProfile = analyzeUserProfile(userSkills, userDescription);
+  console.log('🔍 Perfil analisado:', {
+    skillCount: userSkills.length,
+    interests: userProfile.interests.slice(0, 5),
+    level: userProfile.experienceLevel
+  });
   
-  // Extrair palavras-chave do usuário para melhor matching
-  const userKeywords = extractUserKeywords(userDescription, userSkills);
-  console.log('🔑 Palavras-chave do perfil:', userKeywords.slice(0, 10));
+  const results: MatchResult[] = [];
 
   for (let i = 0; i < opportunities.length; i++) {
     const opp = opportunities[i];
     
-    // Calcular cada componente separadamente
-    const skillScore = calculateSkillMatchScore(userSkills, opp);
-    const keywordScore = calculateKeywordMatchScore(userKeywords, opp);
-    const interestScore = calculateInterestMatchScore(userDescription, opp);
-    const locationScore = calculateLocationMatchScore(userLocation, opp.location);
-    const availabilityScore = calculateAvailabilityMatchScore(userAvailability, opp);
+    // Calcular score detalhado
+    const scores = calculateDetailedMatchScores({
+      userSkills,
+      userDescription,
+      userLocation,
+      userAvailability,
+      userProfile,
+      opportunity: opp
+    });
     
-    // Calcular score total com pesos
-    let totalScore = 0;
-    totalScore += skillScore * 0.40;      // 40% habilidades
-    totalScore += keywordScore * 0.25;    // 25% palavras-chave
-    totalScore += interestScore * 0.20;   // 20% interesses
-    totalScore += locationScore * 0.10;   // 10% localização
-    totalScore += availabilityScore * 0.05; // 5% disponibilidade
+    // Score final é a média ponderada
+    let finalScore = Math.round(
+      scores.skillScore * 0.35 +
+      scores.interestScore * 0.30 +
+      scores.keywordScore * 0.15 +
+      scores.descriptionScore * 0.10 +
+      scores.locationScore * 0.05 +
+      scores.availabilityScore * 0.05
+    );
     
-    // Garantir score entre 25 e 98
-    let finalScore = Math.min(98, Math.max(25, Math.round(totalScore)));
+    // Garantir que seja 0-100
+    finalScore = Math.min(100, Math.max(0, finalScore));
     
-    // Pequena variação baseada no índice para não ficar igual
-    finalScore = finalScore + ((i * 3) % 7) - 3;
-    finalScore = Math.min(98, Math.max(25, finalScore));
+    // Encontrar skills que deram match
+    const matchedSkills = findMatchedSkillsDetailed(userSkills, userDescription, opp);
     
-    // Encontrar habilidades que deram match
-    const matchedSkills = findMatchingSkills(userSkills, opp, userDescription);
+    // Gerar reasoning baseado nos scores
+    const reasoning = generateDetailedReasoning(finalScore, matchedSkills, opp, userProfile);
+    const recommendation = generateDetailedRecommendation(finalScore, matchedSkills, opp);
     
     let priority: 'high' | 'medium' | 'low' = 'medium';
     if (finalScore >= 70) priority = 'high';
@@ -233,271 +297,283 @@ function calculateMatchesWithVariedScores(user: any, opportunities: any[]): Matc
       matchScore: finalScore,
       matchedSkills: matchedSkills.slice(0, 4),
       missingSkills: [],
-      reasoning: generatePersonalizedReasoning(finalScore, matchedSkills, opp, userSkills, userDescription),
-      recommendation: generatePersonalizedRecommendation(finalScore, matchedSkills, opp, userSkills),
+      reasoning: reasoning,
+      recommendation: recommendation,
       priority: priority,
       theme: opp.theme,
       projectLink: opp.projectLink
     });
   }
   
+  // Ordenar por score decrescente
   results.sort((a, b) => b.matchScore - a.matchScore);
   
   return results;
 }
 
-// Extrair palavras-chave relevantes do usuário
-function extractUserKeywords(description: string, skills: string[]): string[] {
+interface UserProfile {
+  interests: string[];
+  experienceLevel: 'beginner' | 'intermediate' | 'advanced';
+  keywords: string[];
+}
+
+function analyzeUserProfile(skills: string[], description: string): UserProfile {
+  const interests: string[] = [];
   const keywords: string[] = [...skills];
   
-  const importantWords = ['educação', 'saúde', 'ambiente', 'social', 'criança', 'idoso', 'animal', 
-    'tecnologia', 'arte', 'cultura', 'esporte', 'comunidade', 'ensinar', 'aprender', 'ajudar', 
-    'voluntário', 'assistência', 'desenvolvimento', 'sustentabilidade', 'inclusão'];
-  
-  for (const word of importantWords) {
-    if (description.includes(word)) {
-      keywords.push(word);
-    }
-  }
-  
-  return [...new Set(keywords)];
-}
-
-// Score de habilidades (0-100)
-function calculateSkillMatchScore(userSkills: string[], opp: any): number {
-  if (userSkills.length === 0) return 40;
-  
-  const oppText = `${opp.title} ${opp.description} ${opp.theme}`.toLowerCase();
-  let matchCount = 0;
-  let strongMatches = 0;
-  
-  for (const skill of userSkills) {
-    if (oppText.includes(skill.toLowerCase())) {
-      matchCount++;
-      // Verificar se é um match forte (aparece no título)
-      if (opp.title.toLowerCase().includes(skill.toLowerCase())) {
-        strongMatches++;
-      }
-    }
-  }
-  
-  const percentage = (matchCount / userSkills.length) * 100;
-  // Adicionar bônus para matches fortes
-  const bonus = strongMatches * 10;
-  
-  return Math.min(95, Math.max(30, percentage + bonus));
-}
-
-// Score de palavras-chave (0-100)
-function calculateKeywordMatchScore(userKeywords: string[], opp: any): number {
-  if (userKeywords.length === 0) return 35;
-  
-  const oppText = `${opp.title} ${opp.description} ${opp.theme}`.toLowerCase();
-  let matchCount = 0;
-  
-  for (const keyword of userKeywords) {
-    if (oppText.includes(keyword.toLowerCase())) {
-      matchCount++;
-    }
-  }
-  
-  const percentage = (matchCount / userKeywords.length) * 100;
-  return Math.min(90, Math.max(30, percentage));
-}
-
-// Score de interesses baseado na descrição (0-100)
-function calculateInterestMatchScore(userDescription: string, opp: any): number {
-  if (userDescription.length < 20) return 45;
-  
-  const oppText = `${opp.title} ${opp.description} ${opp.theme}`.toLowerCase();
-  let score = 0;
-  
-  // Temas de interesse
-  const interestThemes = [
-    { theme: 'educação', keywords: ['educação', 'ensino', 'escola', 'criança', 'alfabetização', 'professor'] },
-    { theme: 'saúde', keywords: ['saúde', 'hospital', 'médico', 'paciente', 'bem-estar', 'cuidado'] },
-    { theme: 'ambiente', keywords: ['ambiente', 'ecologia', 'sustentabilidade', 'reciclagem', 'natureza'] },
-    { theme: 'social', keywords: ['social', 'comunidade', 'assistência', 'moradia', 'fome', 'pobreza'] },
-    { theme: 'animais', keywords: ['animal', 'pet', 'bicho', 'fauna', 'proteção animal'] },
-    { theme: 'tecnologia', keywords: ['tecnologia', 'programação', 'informática', 'digital', 'software'] },
-    { theme: 'cultura', keywords: ['cultura', 'arte', 'música', 'teatro', 'dança', 'patrimônio'] },
-    { theme: 'esportes', keywords: ['esporte', 'futebol', 'atividade física', 'lazer', 'recreação'] }
+  const interestCategories = [
+    { name: 'educação', words: ['educação', 'ensino', 'escola', 'criança', 'aprender', 'professor', 'alfabetização', 'mentoria'] },
+    { name: 'saúde', words: ['saúde', 'hospital', 'médico', 'paciente', 'bem-estar', 'cuidado', 'enfermagem', 'psicologia'] },
+    { name: 'meio ambiente', words: ['ambiente', 'ecologia', 'sustentabilidade', 'reciclagem', 'natureza', 'floresta', 'água'] },
+    { name: 'social', words: ['social', 'comunidade', 'assistência', 'moradia', 'fome', 'pobreza', 'direitos', 'cidadania'] },
+    { name: 'animais', words: ['animal', 'pet', 'cachorro', 'gato', 'fauna', 'proteção animal', 'abrigo'] },
+    { name: 'tecnologia', words: ['tecnologia', 'programação', 'informática', 'digital', 'software', 'site', 'app', 'ti'] },
+    { name: 'cultura', words: ['cultura', 'arte', 'música', 'teatro', 'dança', 'artesanato', 'patrimônio'] },
+    { name: 'esportes', words: ['esporte', 'futebol', 'atividade física', 'lazer', 'recreação', 'saúde'] },
+    { name: 'idosos', words: ['idoso', 'terceira idade', 'envelhecimento', 'aposentado', 'geriátrico'] },
+    { name: 'crianças', words: ['criança', 'infantil', 'adolescente', 'jovem', 'educação infantil'] }
   ];
   
-  for (const interest of interestThemes) {
-    let userHasInterest = false;
-    for (const keyword of interest.keywords) {
-      if (userDescription.includes(keyword)) {
-        userHasInterest = true;
+  for (const category of interestCategories) {
+    for (const word of category.words) {
+      if (description.includes(word)) {
+        interests.push(category.name);
+        keywords.push(word);
         break;
       }
     }
+  }
+  
+  // Determinar nível de experiência baseado na quantidade de skills
+  let experienceLevel: 'beginner' | 'intermediate' | 'advanced' = 'beginner';
+  if (skills.length >= 5) experienceLevel = 'advanced';
+  else if (skills.length >= 3) experienceLevel = 'intermediate';
+  
+  return {
+    interests: [...new Set(interests)],
+    experienceLevel,
+    keywords: [...new Set(keywords)]
+  };
+}
+
+interface DetailedScores {
+  skillScore: number;
+  interestScore: number;
+  keywordScore: number;
+  descriptionScore: number;
+  locationScore: number;
+  availabilityScore: number;
+}
+
+function calculateDetailedMatchScores(params: {
+  userSkills: string[];
+  userDescription: string;
+  userLocation: string;
+  userAvailability: string;
+  userProfile: UserProfile;
+  opportunity: any;
+}): DetailedScores {
+  const { userSkills, userDescription, userLocation, userAvailability, userProfile, opportunity } = params;
+  
+  const oppTitle = (opportunity.title || '').toLowerCase();
+  const oppDescription = (opportunity.description || '').toLowerCase();
+  const oppTheme = (opportunity.theme || '').toLowerCase();
+  const oppLocation = (opportunity.location || '').toLowerCase();
+  
+  // 1. SKILL SCORE (0-100)
+  let skillScore = 0;
+  if (userSkills.length > 0) {
+    let matchCount = 0;
+    let strongMatchCount = 0;
     
-    if (userHasInterest) {
-      for (const keyword of interest.keywords) {
-        if (oppText.includes(keyword)) {
-          score += 15;
-          break;
-        }
+    for (const skill of userSkills) {
+      if (oppTitle.includes(skill)) {
+        matchCount += 2;
+        strongMatchCount++;
+      } else if (oppTheme.includes(skill)) {
+        matchCount += 1.5;
+      } else if (oppDescription.includes(skill)) {
+        matchCount += 1;
       }
+    }
+    
+    skillScore = Math.min(100, Math.round((matchCount / userSkills.length) * 100));
+    if (strongMatchCount > 0) skillScore = Math.min(100, skillScore + 15);
+  } else {
+    skillScore = 30;
+  }
+  
+  // 2. INTEREST SCORE (0-100)
+  let interestScore = 40;
+  if (userProfile.interests.length > 0) {
+    let interestMatchCount = 0;
+    for (const interest of userProfile.interests) {
+      if (oppTheme.includes(interest) || oppTitle.includes(interest)) {
+        interestMatchCount++;
+      }
+    }
+    interestScore = Math.min(95, 40 + (interestMatchCount / userProfile.interests.length) * 55);
+  }
+  
+  // 3. KEYWORD SCORE (0-100)
+  let keywordScore = 35;
+  if (userProfile.keywords.length > 0) {
+    let matchCount = 0;
+    for (const keyword of userProfile.keywords) {
+      if (keyword.length > 3 && (oppTitle.includes(keyword) || oppDescription.includes(keyword))) {
+        matchCount++;
+      }
+    }
+    keywordScore = Math.min(90, 35 + (matchCount / userProfile.keywords.length) * 55);
+  }
+  
+  // 4. DESCRIPTION SCORE (0-100) - analisa compatibilidade de texto
+  let descriptionScore = 40;
+  if (userDescription.length > 30) {
+    const userWords = userDescription.split(/\s+/);
+    let commonWordCount = 0;
+    const importantWords = userWords.filter(w => w.length > 4);
+    
+    for (const word of importantWords.slice(0, 30)) {
+      if (oppDescription.includes(word) || oppTitle.includes(word)) {
+        commonWordCount++;
+      }
+    }
+    
+    if (importantWords.length > 0) {
+      descriptionScore = Math.min(85, 40 + (commonWordCount / importantWords.length) * 45);
     }
   }
   
-  return Math.min(95, Math.max(35, 45 + score));
+  // 5. LOCATION SCORE (0-100)
+  let locationScore = 50;
+  if (userLocation.length > 0 && oppLocation.length > 0) {
+    const userCity = userLocation.split(',')[0].trim();
+    const oppCity = oppLocation.split(',')[0].trim();
+    
+    if (userCity === oppCity) {
+      locationScore = 100;
+    } else if (userCity && oppLocation.includes(userCity)) {
+      locationScore = 85;
+    } else if (oppLocation.includes('brasil') || oppLocation.includes('br')) {
+      locationScore = 70;
+    } else if (oppLocation.includes('remote') || oppLocation.includes('online')) {
+      locationScore = 75;
+    } else {
+      locationScore = 50;
+    }
+  }
+  
+  // 6. AVAILABILITY SCORE (0-100)
+  let availabilityScore = 60;
+  if (userAvailability.length > 0) {
+    const availLower = userAvailability.toLowerCase();
+    if (availLower.includes('flexível') || availLower.includes('qualquer')) {
+      availabilityScore = 100;
+    } else if (availLower.includes('fim de semana') && (oppDescription.includes('sábado') || oppDescription.includes('domingo'))) {
+      availabilityScore = 90;
+    } else if (availLower.includes('noite') && oppDescription.includes('noite')) {
+      availabilityScore = 85;
+    } else if (availLower.includes('tarde') && oppDescription.includes('tarde')) {
+      availabilityScore = 80;
+    } else if (availLower.includes('manhã') && oppDescription.includes('manhã')) {
+      availabilityScore = 80;
+    }
+  }
+  
+  return {
+    skillScore: Math.round(skillScore),
+    interestScore: Math.round(interestScore),
+    keywordScore: Math.round(keywordScore),
+    descriptionScore: Math.round(descriptionScore),
+    locationScore: Math.round(locationScore),
+    availabilityScore: Math.round(availabilityScore)
+  };
 }
 
-// Score de localização (0-100)
-function calculateLocationMatchScore(userLocation: string, oppLocation: string): number {
-  if (!userLocation || userLocation.length === 0) return 50;
-  if (!oppLocation) return 50;
-  
-  const userLower = userLocation.toLowerCase();
-  const oppLower = oppLocation.toLowerCase();
-  
-  // Mesmo local exato
-  const userCity = userLower.split(',')[0].trim();
-  const oppCity = oppLower.split(',')[0].trim();
-  
-  if (userCity === oppCity) {
-    return 100;
-  }
-  
-  // Mesmo estado/região
-  const userState = userLower.split(',').pop()?.trim() || '';
-  const oppState = oppLower.split(',').pop()?.trim() || '';
-  
-  if (userState && oppState && userState === oppState) {
-    return 75;
-  }
-  
-  // Cidade mencionada na descrição
-  if (oppLower.includes(userCity) || userLower.includes(oppCity)) {
-    return 70;
-  }
-  
-  // Vaga remota ou online
-  if (oppLower.includes('remote') || oppLower.includes('online') || oppLower.includes('virtual')) {
-    return 65;
-  }
-  
-  return 45;
-}
-
-// Score de disponibilidade (0-100)
-function calculateAvailabilityMatchScore(userAvailability: string, opp: any): number {
-  if (!userAvailability || userAvailability.length === 0) return 50;
-  
-  const userLower = userAvailability.toLowerCase();
-  const oppText = `${opp.title} ${opp.description}`.toLowerCase();
-  
-  if (userLower.includes('flexível') || userLower.includes('qualquer') || userLower.includes('disponível')) {
-    return 90;
-  }
-  
-  if (userLower.includes('fim de semana') && (oppText.includes('sábado') || oppText.includes('domingo'))) {
-    return 85;
-  }
-  
-  if (userLower.includes('noite') && oppText.includes('noite')) {
-    return 80;
-  }
-  
-  if (userLower.includes('manhã') && oppText.includes('manhã')) {
-    return 80;
-  }
-  
-  if (userLower.includes('tarde') && oppText.includes('tarde')) {
-    return 80;
-  }
-  
-  return 55;
-}
-
-// Encontrar habilidades que combinam
-function findMatchingSkills(userSkills: string[], opp: any, userDescription: string): string[] {
+function findMatchedSkillsDetailed(userSkills: string[], userDescription: string, opportunity: any): string[] {
   const matched: string[] = [];
-  const oppText = `${opp.title} ${opp.description} ${opp.theme}`.toLowerCase();
+  const oppText = `${opportunity.title} ${opportunity.description} ${opportunity.theme}`.toLowerCase();
   
+  // Match com skills
   for (const skill of userSkills) {
     if (oppText.includes(skill.toLowerCase())) {
       matched.push(skill);
     }
   }
   
-  // Se não encontrou, buscar na descrição do usuário
-  if (matched.length === 0 && userDescription.length > 0) {
-    const descWords = userDescription.split(/\s+/);
-    for (const word of descWords) {
-      if (word.length > 5 && oppText.includes(word.toLowerCase())) {
+  // Se poucas skills, buscar na descrição
+  if (matched.length < 2 && userDescription.length > 0) {
+    const importantWords = userDescription.split(/\s+/).filter(w => w.length > 5);
+    for (const word of importantWords.slice(0, 10)) {
+      if (oppText.includes(word.toLowerCase()) && !matched.includes(word)) {
         matched.push(word.substring(0, 20));
         if (matched.length >= 3) break;
       }
     }
   }
   
-  // Sugestões baseadas no tema
-  if (matched.length === 0 && opp.theme) {
+  // Sugestões baseadas no tema se necessário
+  if (matched.length === 0 && opportunity.theme) {
     const suggestions: { [key: string]: string[] } = {
-      'Educação': ['Ensinar', 'Comunicar-se bem', 'Paciência', 'Planejar atividades'],
-      'Saúde': ['Atendimento humanizado', 'Organização', 'Empatia', 'Trabalhar sob pressão'],
-      'Meio Ambiente': ['Conscientização ambiental', 'Trabalho em equipe', 'Organização', 'Proatividade'],
-      'Social': ['Comunicação interpessoal', 'Escuta ativa', 'Empatia', 'Resolver problemas'],
-      'Tecnologia': ['Conhecimento em informática', 'Resolução de problemas', 'Aprendizado rápido', 'Lógica'],
-      'Cultura': ['Criatividade', 'Comunicação', 'Artes', 'Planejamento'],
-      'Animais': ['Responsabilidade', 'Paciência', 'Compaixão', 'Cuidados básicos'],
-      'Crianças': ['Criatividade', 'Paciência', 'Responsabilidade', 'Dinamismo'],
+      'Educação': ['Ensinar', 'Comunicar-se bem', 'Planejar atividades', 'Paciência'],
+      'Saúde': ['Atendimento', 'Empatia', 'Organização', 'Trabalho em equipe'],
+      'Meio Ambiente': ['Conscientização', 'Organização', 'Trabalho externo', 'Proatividade'],
+      'Social': ['Comunicação', 'Escuta ativa', 'Empatia', 'Resolução de problemas'],
+      'Tecnologia': ['Informática', 'Resolução de problemas', 'Aprendizado rápido', 'Lógica'],
+      'Cultura': ['Criatividade', 'Comunicação', 'Organização de eventos', 'Artes'],
+      'Animais': ['Cuidado com animais', 'Paciência', 'Responsabilidade', 'Compaixão'],
+      'Crianças': ['Criatividade', 'Paciência', 'Dinamismo', 'Responsabilidade'],
       'Esportes': ['Atividade física', 'Trabalho em equipe', 'Liderança', 'Motivação']
     };
     
-    const suggestion = suggestions[opp.theme];
-    if (suggestion) return suggestion.slice(0, 4);
+    const suggestion = suggestions[opportunity.theme];
+    if (suggestion) return suggestion;
     return ['Comunicação', 'Trabalho em equipe', 'Comprometimento', 'Proatividade'];
   }
   
   return matched;
 }
 
-// Reasoning personalizado
-function generatePersonalizedReasoning(score: number, matchedSkills: string[], opp: any, userSkills: string[], userDescription: string): string {
-  const title = opp.title.length > 50 ? opp.title.substring(0, 50) + '...' : opp.title;
+function generateDetailedReasoning(score: number, matchedSkills: string[], opportunity: any, userProfile: UserProfile): string {
+  const title = opportunity.title.length > 50 ? opportunity.title.substring(0, 50) + '...' : opportunity.title;
   
-  if (score >= 80) {
+  if (score >= 85) {
     if (matchedSkills.length >= 2) {
-      return `Excelente! Suas habilidades em ${matchedSkills[0]} e ${matchedSkills[1]} são exatamente o que o projeto "${title}" precisa. Seu perfil se destaca muito positivamente.`;
+      return `🔥 Match excepcional! Suas habilidades em ${matchedSkills[0]} e ${matchedSkills[1]} são perfeitamente alinhadas com o projeto "${title}". Você está pronto para fazer a diferença!`;
     } else if (matchedSkills.length === 1) {
-      return `Ótimo! Sua experiência em ${matchedSkills[0]} é muito relevante para este projeto. Você tem tudo para fazer a diferença!`;
+      return `⭐ Excelente compatibilidade! Sua experiência em ${matchedSkills[0]} é exatamente o que este projeto precisa. Candidate-se agora!`;
     }
-    return `Excelente oportunidade! Seu perfil está muito alinhado com as necessidades deste projeto. Suas características se encaixam perfeitamente.`;
-  } else if (score >= 65) {
+    return `🎯 Perfeito! Seu perfil se destaca para esta oportunidade. As características que você possui são muito valorizadas neste projeto.`;
+  } else if (score >= 70) {
     if (matchedSkills.length >= 1) {
-      return `Boa compatibilidade! Sua habilidade em ${matchedSkills[0]} será muito útil. Com algumas adaptações, você pode ser um excelente voluntário aqui.`;
+      return `👍 Ótimo match! Sua habilidade em ${matchedSkills[0]} será muito útil. Você tem um perido muito alinhado com as necessidades deste projeto.`;
     }
-    return `Compatibilidade positiva! Seu perfil tem pontos que se alinham bem com este projeto. Vale a pena considerar.`;
-  } else if (score >= 45) {
+    return `💡 Boa oportunidade! Seu perfil se encaixa bem com o que o projeto "${title}" está procurando. Vale a pena conhecer mais.`;
+  } else if (score >= 50) {
     if (matchedSkills.length >= 1) {
-      return `Compatibilidade média. Sua experiência em ${matchedSkills[0]} é relevante, e esta oportunidade pode te ajudar a desenvolver novas competências.`;
+      return `📌 Compatibilidade positiva. Sua experiência em ${matchedSkills[0]} é relevante, e esta oportunidade pode te ajudar a desenvolver novas competências valiosas.`;
     }
-    return `Oportunidade interessante para expandir seus horizontes. Seu perfil tem potencial para contribuir e aprender muito.`;
+    return `🌱 Oportunidade interessante para crescimento. Seu perfil tem potencial para contribuir e aprender muito neste projeto.`;
   } else {
-    return `Este projeto representa uma ótima chance de crescimento pessoal. Embora seja diferente da sua experiência atual, você pode desenvolver novas habilidades valiosas.`;
+    return `🔄 Chance de desenvolvimento. Embora seja uma área diferente da sua experiência atual, este projeto oferece ótimas oportunidades de aprendizado e expansão de habilidades.`;
   }
 }
 
-// Recommendation personalizada
-function generatePersonalizedRecommendation(score: number, matchedSkills: string[], opp: any, userSkills: string[]): string {
-  if (score >= 80) {
+function generateDetailedRecommendation(score: number, matchedSkills: string[], opportunity: any): string {
+  if (score >= 85) {
     if (matchedSkills.length >= 2) {
-      return `🎯 RECOMENDAÇÃO FORTE: Candidate-se agora! Este projeto busca exatamente profissionais com suas habilidades em ${matchedSkills[0]} e ${matchedSkills[1]}.`;
+      return `🎉 RECOMENDAÇÃO FORTÍSSIMA: Candidate-se AGORA! Este projeto foi feito para você. Suas habilidades em ${matchedSkills[0]} e ${matchedSkills[1]} são exatamente o que eles buscam.`;
     }
-    return `🎯 RECOMENDAÇÃO FORTE: Esta oportunidade foi feita para você! Seu perfil se destaca muito.`;
-  } else if (score >= 65) {
+    return `🏆 RECOMENDAÇÃO EXCELENTE: Não perca esta oportunidade! Seu perfil está perfeitamente alinhado com o que o projeto precisa.`;
+  } else if (score >= 70) {
     if (matchedSkills.length >= 1) {
-      return `✨ RECOMENDAÇÃO POSITIVA: Vale muito a pena se candidatar. Sua experiência em ${matchedSkills[0]} será muito valorizada.`;
+      return `✨ RECOMENDAÇÃO POSITIVA: Vale muito a pena se candidatar. Sua experiência em ${matchedSkills[0]} será muito valorizada neste projeto.`;
     }
-    return `✨ RECOMENDAÇÃO POSITIVA: Boa oportunidade alinhada ao seu perfil. Considere se candidatar.`;
-  } else if (score >= 45) {
-    return `💡 RECOMENDAÇÃO: Oportunidade interessante para aplicar seus conhecimentos e crescer. Vale a pena conhecer mais.`;
+    return `✅ RECOMENDAÇÃO: Ótima oportunidade alinhada ao seu perfil. Considere seriamente se candidatar.`;
+  } else if (score >= 50) {
+    return `📋 RECOMENDAÇÃO: Boa oportunidade para aplicar seus conhecimentos e crescer profissionalmente. Vale a pena conhecer mais detalhes.`;
   } else {
-    return `🌟 RECOMENDAÇÃO: Uma chance valiosa de aprendizado e desenvolvimento. Pode ser uma experiência enriquecedora.`;
+    return `🌟 RECOMENDAÇÃO: Uma chance valiosa de aprendizado e desenvolvimento de novas competências. Pode ser uma experiência enriquecedora.`;
   }
 }
