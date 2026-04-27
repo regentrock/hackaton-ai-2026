@@ -84,10 +84,10 @@ export async function GET(request: NextRequest) {
 
     console.log(`📦 ${opportunities.length} oportunidades encontradas`);
 
-    // 4. Calcular matches USANDO WATSONX
-    const matches = await calculateMatchesWithAI(user, opportunities);
+    // 4. Calcular matches com scores personalizados
+    const matches = calculateMatchesWithScores(user, opportunities);
 
-    // 5. Ordenar e retornar
+    // 5. Ordenar por score (maior primeiro)
     matches.sort((a, b) => b.matchScore - a.matchScore);
     
     const executionTime = Date.now() - startTime;
@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      matches: matches.slice(0, 15),
+      matches: matches.slice(0, 30),
       total: matches.length,
       userSkills: user.skills || [],
       executionTimeMs: executionTime,
@@ -165,188 +165,175 @@ async function fetchOpportunitiesWithCache(): Promise<any[]> {
   }
 }
 
-async function calculateMatchesWithAI(user: any, opportunities: any[]): Promise<MatchResult[]> {
-  console.log('\n🤖 ANALISANDO MATCHES COM WATSONX...');
-  
+// 🔥 FUNÇÃO PRINCIPAL DE CÁLCULO DE MATCHES 🔥
+function calculateMatchesWithScores(user: any, opportunities: any[]): MatchResult[] {
+  const userSkills = user.skills?.map((s: string) => s.toLowerCase()) || [];
   const results: MatchResult[] = [];
-  const batchSize = 5;
-  
-  for (let i = 0; i < opportunities.length; i += batchSize) {
-    const batch = opportunities.slice(i, i + batchSize);
-    const batchNum = Math.floor(i / batchSize) + 1;
-    const totalBatches = Math.ceil(opportunities.length / batchSize);
+
+  for (const opp of opportunities) {
+    // Calcular score de match baseado nas habilidades do usuário
+    const matchScore = calculateMatchScore(userSkills, opp);
     
-    console.log(`📦 Processando lote ${batchNum}/${totalBatches}`);
+    // Determinar matched skills
+    const matchedSkills = findMatchedSkills(userSkills, opp);
     
-    const batchPromises = batch.map(async (opportunity: any) => {
-      return await analyzeMatchWithWatsonX(user, opportunity);
+    // Determinar prioridade baseada no score
+    let priority: 'high' | 'medium' | 'low' = 'medium';
+    if (matchScore >= 70) priority = 'high';
+    else if (matchScore >= 45) priority = 'medium';
+    else priority = 'low';
+    
+    // Gerar reasoning baseado no score
+    const reasoning = generateReasoning(matchScore, matchedSkills, opp.title);
+    
+    // Gerar recommendation baseada no score
+    const recommendation = generateRecommendation(matchScore, matchedSkills);
+    
+    results.push({
+      id: opp.id,
+      title: opp.title,
+      organization: opp.organization,
+      location: opp.location,
+      description: opp.description?.substring(0, 300),
+      skills: extractSkillsFromText(opp),
+      matchScore: matchScore,
+      matchedSkills: matchedSkills.slice(0, 4),
+      missingSkills: [],
+      reasoning: reasoning,
+      recommendation: recommendation,
+      priority: priority,
+      theme: opp.theme
     });
-    
-    const batchResults = await Promise.all(batchPromises);
-    results.push(...batchResults);
-    
-    if (i + batchSize < opportunities.length) {
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
   }
   
   return results;
 }
 
-async function analyzeMatchWithWatsonX(user: any, opportunity: any): Promise<MatchResult> {
-  try {
-    if (!process.env.IBM_API_KEY || !process.env.IBM_URL || !process.env.IBM_PROJECT_ID) {
-      console.log('⚠️ WatsonX não configurado, usando fallback');
-      return createBasicMatch(user, opportunity, 50);
+// 🔥 CÁLCULO DE MATCH SCORE 🔥
+function calculateMatchScore(userSkills: string[], opportunity: any): number {
+  if (!userSkills || userSkills.length === 0) {
+    return 45; // Score médio para usuários sem habilidades
+  }
+  
+  const oppTitle = (opportunity.title || '').toLowerCase();
+  const oppDescription = (opportunity.description || '').toLowerCase();
+  const oppTheme = (opportunity.theme || '').toLowerCase();
+  const oppText = `${oppTitle} ${oppDescription} ${oppTheme}`;
+  
+  let totalScore = 0;
+  let matchesFound = 0;
+  
+  for (const userSkill of userSkills) {
+    const skillLower = userSkill.toLowerCase();
+    
+    // Verificar se a skill aparece no título (peso maior)
+    if (oppTitle.includes(skillLower)) {
+      totalScore += 25;
+      matchesFound++;
     }
-    
-    const tokenResponse = await fetch('https://iam.cloud.ibm.com/identity/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey=${process.env.IBM_API_KEY}`
-    });
-    
-    if (!tokenResponse.ok) {
-      console.warn('Erro ao obter token IAM');
-      return createBasicMatch(user, opportunity, 50);
+    // Verificar se aparece no tema (peso médio)
+    else if (oppTheme.includes(skillLower)) {
+      totalScore += 15;
+      matchesFound++;
     }
-    
-    const tokenData = await tokenResponse.json();
-    const accessToken = tokenData.access_token;
-    
-    const prompt = `You are an AI that matches volunteers to opportunities. Analyze the match between a volunteer and an opportunity.
-
-=== VOLUNTEER ===
-Skills: ${user.skills?.join(', ') || 'None listed'}
-Location: ${user.location || 'Not specified'}
-
-=== OPPORTUNITY ===
-Title: ${opportunity.title}
-Organization: ${opportunity.organization}
-Theme: ${opportunity.theme || 'Social Impact'}
-Description: ${opportunity.description?.substring(0, 600) || 'No description'}
-
-=== TASK ===
-Based STRICTLY on the volunteer's skills, determine how well they match this opportunity.
-
-Calculate a match score from 0 to 100.
-
-Return ONLY this JSON:
-{
-  "score": number,
-  "matchedSkills": ["skill1", "skill2"],
-  "reasoning": "em português",
-  "recommendation": "em português"
-}`;
-
-    const watsonResponse = await fetch(`${process.env.IBM_URL}/ml/v1/text/generation?version=2023-05-29`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        input: prompt,
-        model_id: "ibm/granite-3-8b-instruct",
-        project_id: process.env.IBM_PROJECT_ID,
-        parameters: {
-          decoding_method: "greedy",
-          max_new_tokens: 250,
-          temperature: 0.2,
-        },
-      }),
-    });
-
-    if (!watsonResponse.ok) {
-      console.warn(`WatsonX error: ${watsonResponse.status}`);
-      return createBasicMatch(user, opportunity, 50);
+    // Verificar se aparece na descrição (peso menor)
+    else if (oppDescription.includes(skillLower)) {
+      totalScore += 8;
+      matchesFound++;
     }
+  }
+  
+  // Bônus por múltiplos matches
+  if (matchesFound >= 2) totalScore += 10;
+  if (matchesFound >= 3) totalScore += 15;
+  
+  // Garantir que o score esteja entre 15 e 95
+  let finalScore = Math.min(95, Math.max(15, totalScore));
+  
+  // Se não encontrou nenhum match, dar score baseado no tema
+  if (matchesFound === 0 && totalScore === 0) {
+    finalScore = 35;
+  }
+  
+  // Pequena variação para não ficar tudo igual (baseado no ID)
+  const idHash = opportunity.id.split('').reduce((acc: number, char: string) => acc + char.charCodeAt(0), 0);
+  const variation = (idHash % 15) - 7; // Entre -7 e +7
+  finalScore = Math.min(95, Math.max(15, finalScore + variation));
+  
+  return Math.floor(finalScore);
+}
 
-    const data = await watsonResponse.json();
-    const aiText = data.results[0].generated_text;
-    
-    const cleanText = aiText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-    
-    if (!jsonMatch) {
-      return createBasicMatch(user, opportunity, 50);
+// 🔥 ENCONTRAR SKILLS QUE MATCHAM 🔥
+function findMatchedSkills(userSkills: string[], opportunity: any): string[] {
+  const matched: string[] = [];
+  const oppText = `${opportunity.title} ${opportunity.description} ${opportunity.theme}`.toLowerCase();
+  
+  for (const skill of userSkills) {
+    if (oppText.includes(skill.toLowerCase())) {
+      matched.push(skill);
     }
-    
-    const parsed = JSON.parse(jsonMatch[0]);
-    
-    let score = Math.min(95, Math.max(15, parsed.score || 50));
-    
-    // Bônus de localização
-    if (user.location && opportunity.location) {
-      const userCity = user.location.split(',')[0].trim().toLowerCase();
-      const oppLocation = opportunity.location.toLowerCase();
-      if (oppLocation.includes(userCity)) {
-        score = Math.min(95, score + 10);
-      }
+  }
+  
+  return matched;
+}
+
+// 🔥 EXTRAIR SKILLS DO TEXTO DA OPORTUNIDADE 🔥
+function extractSkillsFromText(opportunity: any): string[] {
+  const skills: string[] = [];
+  const text = `${opportunity.title} ${opportunity.description} ${opportunity.theme}`.toLowerCase();
+  
+  const skillKeywords = [
+    'educação', 'ensino', 'professor', 'escola', 'criança',
+    'tecnologia', 'programação', 'software', 'web', 'digital',
+    'saúde', 'medicina', 'enfermagem', 'cuidado',
+    'ambiente', 'ecologia', 'sustentabilidade', 'reciclagem',
+    'social', 'comunidade', 'voluntariado', 'assistência',
+    'cultura', 'arte', 'música', 'teatro',
+    'esporte', 'futebol', 'atividade física',
+    'administração', 'gestão', 'organização',
+    'comunicação', 'marketing', 'redes sociais'
+  ];
+  
+  for (const keyword of skillKeywords) {
+    if (text.includes(keyword)) {
+      skills.push(keyword.charAt(0).toUpperCase() + keyword.slice(1));
     }
-    
-    // Bônus para oportunidades remotas
-    if (opportunity.location.toLowerCase().includes('remoto')) {
-      score = Math.min(95, score + 5);
+  }
+  
+  return skills.slice(0, 4);
+}
+
+// 🔥 GERAR EXPLICAÇÃO DO MATCH 🔥
+function generateReasoning(score: number, matchedSkills: string[], title: string): string {
+  if (score >= 80 && matchedSkills.length > 0) {
+    return `🏆 Excelente compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são altamente relevantes para o projeto "${title}". Você tem um perfil muito alinhado com as necessidades desta organização.`;
+  } else if (score >= 65) {
+    if (matchedSkills.length > 0) {
+      return `👍 Boa compatibilidade! Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} serão muito úteis para o projeto "${title}". Você pode contribuir de forma significativa.`;
     }
-    
-    const priority: 'high' | 'medium' | 'low' = score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low';
-    
-    return {
-      id: opportunity.id,
-      title: opportunity.title,
-      organization: opportunity.organization,
-      location: opportunity.location,
-      description: opportunity.description?.substring(0, 200),
-      skills: [],
-      matchScore: score,
-      matchedSkills: (parsed.matchedSkills || []).slice(0, 4),
-      missingSkills: [],
-      reasoning: parsed.reasoning || `Match baseado no seu perfil.`,
-      recommendation: parsed.recommendation || `Considere esta oportunidade.`,
-      priority,
-      theme: opportunity.theme
-    };
-    
-  } catch (error) {
-    console.error(`Erro no WatsonX:`, error);
-    return createBasicMatch(user, opportunity, 50);
+    return `💡 Compatibilidade moderada. Este projeto pode se beneficiar da sua experiência e perfil. Considere se candidatar!`;
+  } else if (score >= 45) {
+    if (matchedSkills.length > 0) {
+      return `📌 Compatibilidade positiva. Sua experiência em ${matchedSkills.slice(0, 2).join(', ')} pode agregar valor a este projeto.`;
+    }
+    return `📌 Oportunidade interessante. Embora não haja um alinhamento direto de habilidades, você pode desenvolver novas competências.`;
+  } else {
+    return `📚 Oportunidade de desenvolvimento. Este projeto pode ajudar você a expandir suas habilidades enquanto contribui para uma causa social.`;
   }
 }
 
-function createBasicMatch(user: any, opportunity: any, baseScore: number): MatchResult {
-  let score = baseScore;
-  
-  if (user.skills && user.skills.length > 0) {
-    const text = `${opportunity.title} ${opportunity.description} ${opportunity.theme}`.toLowerCase();
-    let matches = 0;
-    
-    for (const skill of user.skills) {
-      if (text.includes(skill.toLowerCase())) {
-        matches++;
-      }
+// 🔥 GERAR RECOMENDAÇÃO 🔥
+function generateRecommendation(score: number, matchedSkills: string[]): string {
+  if (score >= 80) {
+    return `🎯 RECOMENDAÇÃO FORTE: Candidate-se imediatamente! Suas habilidades são exatamente o que este projeto procura.`;
+  } else if (score >= 65) {
+    if (matchedSkills.length > 0) {
+      return `👍 RECOMENDAÇÃO: Considere se candidatar. Suas habilidades em ${matchedSkills.slice(0, 2).join(', ')} são valiosas para esta oportunidade.`;
     }
-    
-    if (matches > 0) {
-      score = Math.min(80, baseScore + (matches * 10));
-    }
+    return `💡 RECOMENDAÇÃO: Vale a pena explorar esta oportunidade. Você pode contribuir de forma significativa.`;
+  } else if (score >= 45) {
+    return `📋 RECOMENDAÇÃO: Esta é uma boa oportunidade para aplicar seus conhecimentos e fazer a diferença.`;
+  } else {
+    return `📚 RECOMENDAÇÃO: Ótima oportunidade para aprendizado e desenvolvimento de novas habilidades. Candidate-se!`;
   }
-  
-  const priority: 'high' | 'medium' | 'low' = score >= 70 ? 'high' : score >= 40 ? 'medium' : 'low';
-  
-  return {
-    id: opportunity.id,
-    title: opportunity.title,
-    organization: opportunity.organization,
-    location: opportunity.location,
-    description: opportunity.description?.substring(0, 200),
-    skills: [],
-    matchScore: score,
-    matchedSkills: [],
-    missingSkills: [],
-    reasoning: `Oportunidade na área de ${opportunity.theme || 'voluntariado'}.`,
-    recommendation: score >= 70 ? 'Excelente oportunidade para você!' : 'Considere esta oportunidade.',
-    priority,
-    theme: opportunity.theme
-  };
 }

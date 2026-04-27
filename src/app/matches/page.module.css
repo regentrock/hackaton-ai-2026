@@ -876,6 +876,323 @@
   cursor: not-allowed;
 }
 
+/* Seção de mais oportunidades */
+.moreSection {
+  margin-top: 3rem;
+  border-top: 1px solid rgba(176, 38, 41, 0.12);
+  padding-top: 2rem;
+}
+
+.moreSectionHeader {
+  margin-bottom: 1.5rem;
+}
+
+.moreSectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.moreSectionTitle i {
+  font-size: 1.2rem;
+  color: var(--color-primary);
+}
+
+.sectionSubtitle {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.totalCount {
+  background: #f0ebe5;
+  padding: 0.2rem 0.6rem;
+  border-radius: 2rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #6b7280;
+}
+
+.moreControls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.5rem 0;
+}
+
+.filterGroup {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.filterLabel {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.filterChips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.chip {
+  padding: 0.3rem 0.8rem;
+  background: var(--white-background);
+  border: 1px solid #e8e0d8;
+  border-radius: 2rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.chip i {
+  font-size: 0.6rem;
+}
+
+.chip:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.chip.active {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: white;
+}
+
+/* Grid de cards de mais oportunidades */
+.moreCardsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+/* Card de mais oportunidades */
+.moreCard {
+  background: var(--white-background);
+  border-radius: 1rem;
+  border: 1px solid #e8e0d8;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.moreCard:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 24px -8px rgba(0, 0, 0, 0.1);
+}
+
+.moreCardStripe {
+  height: 3px;
+  width: 100%;
+}
+
+.moreCard.high .moreCardStripe {
+  background: linear-gradient(90deg, #10b981, #34d399);
+}
+
+.moreCard.medium .moreCardStripe {
+  background: linear-gradient(90deg, #f59e0b, #fbbf24);
+}
+
+.moreCard.low .moreCardStripe {
+  background: linear-gradient(90deg, #94a3b8, #cbd5e1);
+}
+
+.moreCardInner {
+  padding: 1rem;
+}
+
+.moreCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.moreCardScore {
+  background: rgba(16, 185, 129, 0.1);
+  padding: 0.2rem 0.6rem;
+  border-radius: 2rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.moreCard.high .moreCardScore {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+}
+
+.moreCard.medium .moreCardScore {
+  background: rgba(245, 158, 11, 0.1);
+  color: #d97706;
+}
+
+.moreCard.low .moreCardScore {
+  background: rgba(176, 38, 41, 0.08);
+  color: var(--color-primary);
+}
+
+.moreScoreValue {
+  font-weight: 700;
+}
+
+.moreCardIcon {
+  width: 32px;
+  height: 32px;
+  background: linear-gradient(135deg, rgba(176, 38, 41, 0.08), rgba(176, 38, 41, 0.04));
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(176, 38, 41, 0.1);
+}
+
+.moreCardIcon i {
+  font-size: 0.8rem;
+  color: var(--color-primary);
+}
+
+.moreCardTitle {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: 0.25rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.moreCardOrg {
+  font-size: 0.65rem;
+  color: #9ca3af;
+  margin-bottom: 0.5rem;
+}
+
+.moreCardLocation {
+  font-size: 0.65rem;
+  color: #6b7280;
+  margin-bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.moreCardLocation i {
+  font-size: 0.6rem;
+  color: var(--color-primary);
+  opacity: 0.6;
+}
+
+.moreCardActions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.moreSaveButton {
+  flex: 1;
+  padding: 0.4rem;
+  background: var(--color-primary);
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+}
+
+.moreSaveButton i {
+  font-size: 0.6rem;
+}
+
+.moreSaveButton:hover:not(:disabled) {
+  background: var(--color-primary-dark);
+}
+
+.moreSaveButton:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.moreSaveButton.savedMore {
+  background: #10b981;
+}
+
+.moreViewButton {
+  width: 28px;
+  padding: 0.4rem;
+  background: transparent;
+  border: 1px solid #e8e0d8;
+  border-radius: 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.moreViewButton:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+/* Load More Container */
+.loadMoreContainer {
+  display: flex;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+.loadMoreButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.5rem;
+  background: transparent;
+  border: 1px solid #e8e0d8;
+  border-radius: 2rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.loadMoreButton:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(176, 38, 41, 0.03);
+}
+
+.loadMoreButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* =========================
    RESPONSIVE
 ========================= */

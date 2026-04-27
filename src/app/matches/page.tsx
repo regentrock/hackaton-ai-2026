@@ -23,13 +23,32 @@ interface Match {
   theme?: string;
 }
 
+interface SavedOpportunity {
+  id: string;
+  opportunityId: string;
+  title: string;
+  organization: string;
+  location: string;
+  description: string;
+  skills: string[];
+  theme: string | null;
+  matchScore: number | null;
+  savedAt: string;
+  notes: string | null;
+}
+
 export default function MatchesPage() {
-  const [matches, setMatches] = useState<Match[]>([]);
+  const [allMatches, setAllMatches] = useState<Match[]>([]);
+  const [topMatches, setTopMatches] = useState<Match[]>([]);
+  const [moreMatches, setMoreMatches] = useState<Match[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [usingAI, setUsingAI] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
+  const [moreFilter, setMoreFilter] = useState<'all' | 'high' | 'medium' | 'low'>('all');
   const [savingId, setSavingId] = useState<string | null>(null);
+  const [savedOpportunities, setSavedOpportunities] = useState<Set<string>>(new Set());
+  const [displayCount, setDisplayCount] = useState(8);
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
@@ -41,39 +60,107 @@ export default function MatchesPage() {
 
     if (user) {
       fetchMatches();
+      fetchSavedOpportunities();
     }
   }, [user, authLoading]);
+
+  async function fetchSavedOpportunities() {
+    try {
+      const res = await fetch('/api/user/saved', {
+        credentials: 'include',
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        const savedData: SavedOpportunity[] = data.saved || [];
+        const savedIds = new Set(savedData.map((item: SavedOpportunity) => item.opportunityId));
+        setSavedOpportunities(savedIds);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar oportunidades salvas:', error);
+    }
+  }
+
+  // 🔥 Função para calcular matchScore baseado nas habilidades do usuário
+  function calculateMatchScore(match: Match, userSkills: string[]): number {
+    if (!userSkills || userSkills.length === 0) return 45;
+    
+    const userSkillsLower = userSkills.map(s => s.toLowerCase());
+    const matchSkills = match.skills?.map(s => s.toLowerCase()) || [];
+    const matchText = `${match.title} ${match.description} ${match.theme}`.toLowerCase();
+    
+    let score = 0;
+    let matchesFound = 0;
+    
+    // Calcular match baseado nas skills
+    for (const userSkill of userSkillsLower) {
+      // Verificar nas skills da oportunidade
+      if (matchSkills.some(ms => ms.includes(userSkill) || userSkill.includes(ms))) {
+        matchesFound++;
+        score += 20;
+      }
+      // Verificar no texto da oportunidade
+      else if (matchText.includes(userSkill)) {
+        score += 10;
+      }
+    }
+    
+    // Garantir que o score não ultrapasse 95
+    score = Math.min(95, score);
+    
+    // Se não encontrou nenhum match, dar score base
+    if (matchesFound === 0 && score === 0) {
+      // Score baseado na relevância do tema
+      if (match.theme && userSkillsLower.includes(match.theme.toLowerCase())) {
+        score = 40;
+      } else {
+        score = 30;
+      }
+    }
+    
+    return Math.max(15, Math.min(95, score));
+  }
+
+  // 🔥 Função para enriquecer os matches com scores calculados
+  function enrichMatchesWithScores(matches: Match[], userSkills: string[]): Match[] {
+    return matches.map(match => ({
+      ...match,
+      matchScore: match.matchScore && match.matchScore > 0 
+        ? match.matchScore 
+        : calculateMatchScore(match, userSkills)
+    }));
+  }
 
   async function fetchMatches() {
     try {
       setLoading(true);
       setError(null);
-
-      console.log('🔍 Fetching matches from API...');
       
       const res = await fetch('/api/match', {
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
       });
 
       if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `Erro ${res.status}`);
+        throw new Error(`Erro ${res.status}`);
       }
 
       const data = await res.json();
       
-      console.log('📊 Matches received:', data);
-      console.log('🤖 Using AI:', data.usingAI);
-      console.log('📈 Total matches:', data.matches?.length);
-      
       if (data.success) {
-        setMatches(data.matches || []);
+        const rawMatches = data.matches || [];
+        const userSkills = user?.skills || [];
+        
+        // Enriquecer os matches com scores calculados
+        const enrichedMatches = enrichMatchesWithScores(rawMatches, userSkills);
+        
+        // Ordenar por matchScore (maior primeiro)
+        const sortedMatches = [...enrichedMatches].sort((a, b) => b.matchScore - a.matchScore);
+        
+        setAllMatches(sortedMatches);
+        setTopMatches(sortedMatches.slice(0, 6));
+        setMoreMatches(sortedMatches.slice(6));
         setUsingAI(data.usingAI || false);
-      } else {
-        setMatches(data.matches || []);
       }
       
     } catch (err: any) {
@@ -93,9 +180,7 @@ export default function MatchesPage() {
       const res = await fetch('/api/user/saved', {
         method: 'POST',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           opportunityId: match.id,
           title: match.title,
@@ -112,17 +197,7 @@ export default function MatchesPage() {
       const data = await res.json();
       
       if (data.success) {
-        // Feedback visual - mudar cor do botão temporariamente
-        const button = document.getElementById(`save-btn-${match.id}`);
-        if (button) {
-          button.innerHTML = '<i class="fas fa-check"></i> Salvo!';
-          button.classList.add(styles.saved);
-          setTimeout(() => {
-            button.innerHTML = '<i class="fas fa-heart"></i> Tenho interesse';
-            button.classList.remove(styles.saved);
-          }, 2000);
-        }
-        console.log('✅ Oportunidade salva com sucesso');
+        setSavedOpportunities(prev => new Set(prev).add(match.id));
       } else {
         alert('Erro ao salvar: ' + (data.error || 'Tente novamente'));
       }
@@ -134,15 +209,55 @@ export default function MatchesPage() {
     }
   }
 
-  const getFilteredMatches = () => {
-    if (activeFilter === 'all') return matches;
-    return matches.filter(m => m.priority === activeFilter);
+  const getFilteredTopMatches = () => {
+    if (activeFilter === 'all') return topMatches;
+    return topMatches.filter(m => {
+      if (activeFilter === 'high') return m.matchScore >= 70;
+      if (activeFilter === 'medium') return m.matchScore >= 40 && m.matchScore < 70;
+      if (activeFilter === 'low') return m.matchScore < 40;
+      return true;
+    });
   };
 
-  const filteredMatches = getFilteredMatches();
-  const highCount = matches.filter(m => m.priority === 'high').length;
-  const mediumCount = matches.filter(m => m.priority === 'medium').length;
-  const lowCount = matches.filter(m => m.priority === 'low').length;
+  const getFilteredMoreMatches = () => {
+    let filtered = moreMatches;
+    if (moreFilter !== 'all') {
+      filtered = filtered.filter(m => {
+        if (moreFilter === 'high') return m.matchScore >= 70;
+        if (moreFilter === 'medium') return m.matchScore >= 40 && m.matchScore < 70;
+        if (moreFilter === 'low') return m.matchScore < 40;
+        return true;
+      });
+    }
+    return filtered.slice(0, displayCount);
+  };
+
+  const loadMore = () => {
+    setDisplayCount(prev => prev + 8);
+  };
+
+  const hasMoreToShow = () => {
+    let filtered = moreMatches;
+    if (moreFilter !== 'all') {
+      filtered = filtered.filter(m => {
+        if (moreFilter === 'high') return m.matchScore >= 70;
+        if (moreFilter === 'medium') return m.matchScore >= 40 && m.matchScore < 70;
+        if (moreFilter === 'low') return m.matchScore < 40;
+        return true;
+      });
+    }
+    return displayCount < filtered.length;
+  };
+
+  const filteredTopMatches = getFilteredTopMatches();
+  const filteredMoreMatches = getFilteredMoreMatches();
+  
+  const highCount = topMatches.filter(m => m.matchScore >= 70).length;
+  const mediumCount = topMatches.filter(m => m.matchScore >= 40 && m.matchScore < 70).length;
+  const lowCount = topMatches.filter(m => m.matchScore < 40).length;
+  const moreTotal = moreMatches.length;
+
+  const isSaved = (matchId: string) => savedOpportunities.has(matchId);
 
   if (authLoading || loading) {
     return (
@@ -212,7 +327,7 @@ export default function MatchesPage() {
         )}
 
         {/* Stats Row */}
-        {matches.length > 0 && (
+        {topMatches.length > 0 && (
           <div className={styles.statsRow}>
             {highCount > 0 && (
               <div className={styles.statPill}>
@@ -238,51 +353,49 @@ export default function MatchesPage() {
           </div>
         )}
 
-        {/* Filters */}
-        {matches.length > 0 && (
-          <div className={styles.filtersBar}>
+        {/* Filtros para Top Matches */}
+        <div className={styles.filtersBar}>
+          <button 
+            onClick={() => setActiveFilter('all')}
+            className={`${styles.filterBtn} ${activeFilter === 'all' ? styles.active : ''}`}
+          >
+            Todos
+            <span className={styles.filterCount}>{topMatches.length}</span>
+          </button>
+          {highCount > 0 && (
             <button 
-              onClick={() => setActiveFilter('all')}
-              className={`${styles.filterBtn} ${activeFilter === 'all' ? styles.active : ''}`}
+              onClick={() => setActiveFilter('high')}
+              className={`${styles.filterBtn} ${activeFilter === 'high' ? styles.active : ''}`}
             >
-              Todos
-              <span className={styles.filterCount}>{matches.length}</span>
+              <i className="fas fa-star"></i>
+              Alta compatibilidade
+              <span className={styles.filterCount}>{highCount}</span>
             </button>
-            {highCount > 0 && (
-              <button 
-                onClick={() => setActiveFilter('high')}
-                className={`${styles.filterBtn} ${activeFilter === 'high' ? styles.active : ''}`}
-              >
-                <i className="fas fa-star"></i>
-                Alta compatibilidade
-                <span className={styles.filterCount}>{highCount}</span>
-              </button>
-            )}
-            {mediumCount > 0 && (
-              <button 
-                onClick={() => setActiveFilter('medium')}
-                className={`${styles.filterBtn} ${activeFilter === 'medium' ? styles.active : ''}`}
-              >
-                <i className="fas fa-chart-line"></i>
-                Média compatibilidade
-                <span className={styles.filterCount}>{mediumCount}</span>
-              </button>
-            )}
-            {lowCount > 0 && (
-              <button 
-                onClick={() => setActiveFilter('low')}
-                className={`${styles.filterBtn} ${activeFilter === 'low' ? styles.active : ''}`}
-              >
-                <i className="fas fa-graduation-cap"></i>
-                Desenvolvimento
-                <span className={styles.filterCount}>{lowCount}</span>
-              </button>
-            )}
-          </div>
-        )}
+          )}
+          {mediumCount > 0 && (
+            <button 
+              onClick={() => setActiveFilter('medium')}
+              className={`${styles.filterBtn} ${activeFilter === 'medium' ? styles.active : ''}`}
+            >
+              <i className="fas fa-chart-line"></i>
+              Média compatibilidade
+              <span className={styles.filterCount}>{mediumCount}</span>
+            </button>
+          )}
+          {lowCount > 0 && (
+            <button 
+              onClick={() => setActiveFilter('low')}
+              className={`${styles.filterBtn} ${activeFilter === 'low' ? styles.active : ''}`}
+            >
+              <i className="fas fa-graduation-cap"></i>
+              Desenvolvimento
+              <span className={styles.filterCount}>{lowCount}</span>
+            </button>
+          )}
+        </div>
 
-        {/* Results */}
-        {filteredMatches.length === 0 ? (
+        {/* Top Matches - Grid */}
+        {filteredTopMatches.length === 0 ? (
           <div className={styles.emptyState}>
             <div className={styles.emptyIcon}>
               <i className="fas fa-search"></i>
@@ -295,126 +408,208 @@ export default function MatchesPage() {
           </div>
         ) : (
           <div className={styles.cardsGrid}>
-            {filteredMatches.map((match) => (
-              <div key={match.id} className={`${styles.matchCard} ${styles[match.priority]}`}>
-                
-                {/* Priority stripe */}
-                <div className={styles.cardStripe}></div>
-
-                <div className={styles.cardInner}>
-                  {/* Header */}
-                  <div className={styles.cardHeader}>
-                    <div className={styles.cardHeaderLeft}>
-                      <div className={styles.organizationIcon}>
-                        <i className="fas fa-building"></i>
+            {filteredTopMatches.map((match) => {
+              const saved = isSaved(match.id);
+              return (
+                <div key={match.id} className={`${styles.matchCard} ${getPriorityClass(match.matchScore)}`}>
+                  <div className={styles.cardStripe}></div>
+                  <div className={styles.cardInner}>
+                    <div className={styles.cardHeader}>
+                      <div className={styles.cardHeaderLeft}>
+                        <div className={styles.organizationIcon}>
+                          <i className="fas fa-building"></i>
+                        </div>
+                        <div className={styles.cardTitleGroup}>
+                          <h3 className={styles.cardTitle}>{match.title}</h3>
+                          <p className={styles.organization}>{match.organization}</p>
+                        </div>
                       </div>
-                      <div className={styles.cardTitleGroup}>
-                        <h3 className={styles.cardTitle}>{match.title}</h3>
-                        <p className={styles.organization}>{match.organization}</p>
+                      <div className={`${styles.scoreBadge} ${getScoreClass(match.matchScore)}`}>
+                        <span className={styles.scoreValue}>{match.matchScore}%</span>
+                        <span className={styles.scoreLabel}>match</span>
                       </div>
                     </div>
-                    <div className={`${styles.scoreBadge} ${styles[getScoreClass(match.matchScore)]}`}>
-                      <span className={styles.scoreValue}>{match.matchScore}%</span>
-                      <span className={styles.scoreLabel}>match</span>
-                    </div>
-                  </div>
 
-                  {/* Meta */}
-                  <div className={styles.cardMeta}>
-                    <span className={styles.metaItem}>
-                      <i className="fas fa-map-marker-alt"></i>
-                      {match.location}
-                    </span>
-                    {match.theme && (
+                    <div className={styles.cardMeta}>
                       <span className={styles.metaItem}>
-                        <i className="fas fa-tag"></i>
-                        {match.theme}
+                        <i className="fas fa-map-marker-alt"></i>
+                        {match.location}
                       </span>
+                      {match.theme && (
+                        <span className={styles.metaItem}>
+                          <i className="fas fa-tag"></i>
+                          {match.theme}
+                        </span>
+                      )}
+                    </div>
+
+                    <p className={styles.cardDescription}>{match.description?.substring(0, 120)}...</p>
+
+                    {match.matchedSkills && match.matchedSkills.length > 0 && (
+                      <div className={styles.sectionBlock}>
+                        <div className={styles.sectionTitle}>
+                          <i className="fas fa-check-circle"></i>
+                          <span>Habilidades que combinam</span>
+                        </div>
+                        <div className={styles.skillsGroup}>
+                          {match.matchedSkills.slice(0, 3).map((skill, i) => (
+                            <span key={i} className={`${styles.skill} ${styles.skillMatch}`}>{skill}</span>
+                          ))}
+                        </div>
+                      </div>
                     )}
-                  </div>
 
-                  {/* Description */}
-                  <p className={styles.cardDescription}>{match.description?.substring(0, 120)}...</p>
+                    <div className={styles.reasoningBlock}>
+                      <i className="fas fa-quote-left"></i>
+                      <p>{match.reasoning}</p>
+                    </div>
 
-                  {/* Matched Skills */}
-                  {match.matchedSkills && match.matchedSkills.length > 0 && (
-                    <div className={styles.sectionBlock}>
-                      <div className={styles.sectionTitle}>
-                        <i className="fas fa-check-circle"></i>
-                        <span>Habilidades que combinam</span>
-                      </div>
-                      <div className={styles.skillsGroup}>
-                        {match.matchedSkills.map((skill, i) => (
-                          <span key={i} className={`${styles.skill} ${styles.skillMatch}`}>{skill}</span>
-                        ))}
+                    <div className={styles.recommendationBlock}>
+                      <i className="fas fa-gem"></i>
+                      <div>
+                        <strong>Recomendação</strong>
+                        <p>{match.recommendation}</p>
                       </div>
                     </div>
-                  )}
 
-                  {/* Missing Skills */}
-                  {match.missingSkills && match.missingSkills.length > 0 && (
-                    <div className={styles.sectionBlock}>
-                      <div className={styles.sectionTitle}>
-                        <i className="fas fa-lightbulb"></i>
-                        <span>Habilidades para desenvolver</span>
-                      </div>
-                      <div className={styles.skillsGroup}>
-                        {match.missingSkills.slice(0, 3).map((skill, i) => (
-                          <span key={i} className={`${styles.skill} ${styles.skillMissing}`}>{skill}</span>
-                        ))}
-                      </div>
+                    <div className={styles.actionButtons}>
+                      <button 
+                        id={`save-btn-${match.id}`}
+                        onClick={() => handleSaveOpportunity(match)}
+                        disabled={savingId === match.id}
+                        className={`${styles.interestButton} ${saved ? styles.saved : ''}`}
+                      >
+                        <i className={`fas ${saved ? 'fa-check' : 'fa-heart'}`}></i>
+                        {savingId === match.id ? 'Salvando...' : (saved ? 'Salvo' : 'Tenho interesse')}
+                      </button>
+                      <button 
+                        onClick={() => router.push(`/matches/${match.id}`)}
+                        className={styles.detailsButton}
+                      >
+                        <i className="fas fa-arrow-right"></i>
+                        Mais detalhes
+                      </button>
                     </div>
-                  )}
-
-                  {/* Reasoning */}
-                  <div className={styles.reasoningBlock}>
-                    <i className="fas fa-quote-left"></i>
-                    <p>{match.reasoning}</p>
-                  </div>
-
-                  {/* Recommendation */}
-                  <div className={styles.recommendationBlock}>
-                    <i className="fas fa-gem"></i>
-                    <div>
-                      <strong>Recomendação</strong>
-                      <p>{match.recommendation}</p>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className={styles.actionButtons}>
-                    <button 
-                      id={`save-btn-${match.id}`}
-                      onClick={() => handleSaveOpportunity(match)}
-                      disabled={savingId === match.id}
-                      className={styles.interestButton}
-                    >
-                      <i className="fas fa-heart"></i>
-                      {savingId === match.id ? 'Salvando...' : 'Tenho interesse'}
-                    </button>
-                    <button 
-                      onClick={() => router.push(`/matches/${match.id}`)}
-                      className={styles.detailsButton}
-                    >
-                      <i className="fas fa-arrow-right"></i>
-                      Mais detalhes
-                    </button>
                   </div>
                 </div>
-
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
 
+        {/* Mais Oportunidades - Seção com Filtros */}
+        {moreMatches.length > 0 && (
+          <div className={styles.moreSection}>
+            <div className={styles.moreSectionHeader}>
+              <div className={styles.moreSectionTitle}>
+                <i className="fas fa-compass"></i>
+                <h2 className={styles.sectionSubtitle}>Mais oportunidades para explorar</h2>
+                <span className={styles.totalCount}>{moreTotal} oportunidades</span>
+              </div>
+              
+              <div className={styles.moreControls}>
+                <div className={styles.filterGroup}>
+                  <span className={styles.filterLabel}>Filtrar:</span>
+                  <div className={styles.filterChips}>
+                    <button 
+                      onClick={() => setMoreFilter('all')}
+                      className={`${styles.chip} ${moreFilter === 'all' ? styles.active : ''}`}
+                    >
+                      Todos
+                    </button>
+                    <button 
+                      onClick={() => setMoreFilter('high')}
+                      className={`${styles.chip} ${moreFilter === 'high' ? styles.active : ''}`}
+                    >
+                      <i className="fas fa-star"></i> Alta
+                    </button>
+                    <button 
+                      onClick={() => setMoreFilter('medium')}
+                      className={`${styles.chip} ${moreFilter === 'medium' ? styles.active : ''}`}
+                    >
+                      <i className="fas fa-chart-line"></i> Média
+                    </button>
+                    <button 
+                      onClick={() => setMoreFilter('low')}
+                      className={`${styles.chip} ${moreFilter === 'low' ? styles.active : ''}`}
+                    >
+                      <i className="fas fa-graduation-cap"></i> Baixa
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div className={styles.moreCardsGrid}>
+              {filteredMoreMatches.map((match) => {
+                const saved = isSaved(match.id);
+                return (
+                  <div key={match.id} className={`${styles.moreCard} ${getPriorityClass(match.matchScore)}`}>
+                    <div className={styles.moreCardStripe}></div>
+                    <div className={styles.moreCardInner}>
+                      <div className={styles.moreCardHeader}>
+                        <div className={styles.moreCardScore}>
+                          <span className={styles.moreScoreValue}>{match.matchScore}%</span>
+                        </div>
+                        <div className={styles.moreCardIcon}>
+                          <i className="fas fa-building"></i>
+                        </div>
+                      </div>
+                      <h4 className={styles.moreCardTitle}>{match.title}</h4>
+                      <p className={styles.moreCardOrg}>{match.organization}</p>
+                      <p className={styles.moreCardLocation}>
+                        <i className="fas fa-map-marker-alt"></i> {match.location}
+                      </p>
+                      <div className={styles.moreCardActions}>
+                        <button 
+                          onClick={() => handleSaveOpportunity(match)}
+                          disabled={savingId === match.id}
+                          className={`${styles.moreSaveButton} ${saved ? styles.savedMore : ''}`}
+                        >
+                          <i className={`fas ${saved ? 'fa-check' : 'fa-heart'}`}></i>
+                          {saved ? 'Salvo' : 'Salvar'}
+                        </button>
+                        <button 
+                          onClick={() => router.push(`/matches/${match.id}`)}
+                          className={styles.moreViewButton}
+                        >
+                          <i className="fas fa-arrow-right"></i>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            {/* Botão Carregar Mais */}
+            {hasMoreToShow() && (
+              <div className={styles.loadMoreContainer}>
+                <button 
+                  onClick={loadMore} 
+                  className={styles.loadMoreButton}
+                >
+                  <i className="fas fa-arrow-down"></i>
+                  Carregar mais oportunidades
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 function getScoreClass(score: number): string {
-  if (score >= 75) return 'scoreHigh';
-  if (score >= 50) return 'scoreMedium';
+  if (score >= 70) return 'scoreHigh';
+  if (score >= 45) return 'scoreMedium';
   if (score >= 25) return 'scoreLow';
   return 'scoreVeryLow';
+}
+
+function getPriorityClass(score: number): string {
+  if (score >= 70) return 'high';
+  if (score >= 45) return 'medium';
+  return 'low';
 }

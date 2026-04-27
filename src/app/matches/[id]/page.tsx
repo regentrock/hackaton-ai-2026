@@ -30,6 +30,8 @@ export default function OpportunityDetailPage() {
   const [opportunity, setOpportunity] = useState<OpportunityDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isSaved, setIsSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!authLoading && !user) {
@@ -39,6 +41,7 @@ export default function OpportunityDetailPage() {
 
     if (user && params.id) {
       fetchOpportunityDetail();
+      checkIfSaved();
     }
   }, [user, authLoading, params.id]);
 
@@ -72,6 +75,95 @@ export default function OpportunityDetailPage() {
       setError(err.message || 'Erro ao carregar detalhes da oportunidade');
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function checkIfSaved() {
+    try {
+      const res = await fetch('/api/user/saved', {
+        credentials: 'include',
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        const saved = data.saved || [];
+        const isOpportunitySaved = saved.some((item: any) => item.opportunityId === params.id);
+        setIsSaved(isOpportunitySaved);
+      }
+    } catch (error) {
+      console.error('Erro ao verificar se está salvo:', error);
+    }
+  }
+
+  async function handleSave() {
+    if (saving) return;
+    setSaving(true);
+    
+    if (!opportunity) return;
+    
+    try {
+      if (isSaved) {
+        // Remover dos salvos
+        const res = await fetch(`/api/user/saved?opportunityId=${opportunity.id}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+        
+        if (res.ok) {
+          setIsSaved(false);
+          // Feedback visual
+          const button = document.getElementById('save-button');
+          if (button) {
+            button.innerHTML = '<i class="fas fa-bookmark"></i> Salvar';
+            button.classList.remove(styles.saved);
+          }
+          console.log('✅ Oportunidade removida dos salvos');
+        } else {
+          alert('Erro ao remover dos salvos');
+        }
+      } else {
+        // Adicionar aos salvos
+        const res = await fetch('/api/user/saved', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            opportunityId: opportunity.id,
+            title: opportunity.title,
+            organization: opportunity.organization,
+            location: opportunity.location,
+            description: opportunity.description,
+            skills: opportunity.skills,
+            theme: opportunity.theme,
+            matchScore: opportunity.matchScore,
+            projectLink: opportunity.projectLink
+          })
+        });
+        
+        if (res.ok) {
+          setIsSaved(true);
+          // Feedback visual
+          const button = document.getElementById('save-button');
+          if (button) {
+            button.innerHTML = '<i class="fas fa-check"></i> Salvo!';
+            button.classList.add(styles.saved);
+            setTimeout(() => {
+              if (button && isSaved) {
+                button.innerHTML = '<i class="fas fa-bookmark"></i> Salvo';
+              }
+            }, 2000);
+          }
+          console.log('✅ Oportunidade salva com sucesso');
+        } else {
+          const data = await res.json();
+          alert('Erro ao salvar: ' + (data.error || 'Tente novamente'));
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao salvar/remover:', error);
+      alert('Erro ao salvar oportunidade. Tente novamente.');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -112,9 +204,14 @@ export default function OpportunityDetailPage() {
             Voltar
           </button>
           <div className={styles.topBarActions}>
-            <button className={styles.saveButton}>
-              <i className="fas fa-bookmark"></i>
-              Salvar
+            <button 
+              id="save-button"
+              onClick={handleSave}
+              disabled={saving}
+              className={`${styles.saveButton} ${isSaved ? styles.saved : ''}`}
+            >
+              <i className={`fas ${isSaved ? 'fa-check' : 'fa-bookmark'}`}></i>
+              {saving ? 'Salvando...' : (isSaved ? 'Salvo' : 'Salvar')}
             </button>
             <button className={styles.contactButton}>
               <i className="fas fa-envelope"></i>
