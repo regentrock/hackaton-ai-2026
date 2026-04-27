@@ -2,7 +2,7 @@
 'use client';
 
 import { useAuth } from '@/src/contexts/AuthContext';
-import { openChat } from '@/src/lib/chatUtils';
+import CustomChat from '@/src/components/CustomChat/CustomChat';
 import styles from './FloatingChatButton.module.css';
 
 export default function FloatingChatButton() {
@@ -10,18 +10,5 @@ export default function FloatingChatButton() {
 
   if (!user) return null;
 
-  const handleOpenChat = () => {
-    openChat(user);
-  };
-
-  return (
-    <button 
-      className={styles.chatButton}
-      onClick={handleOpenChat}
-      aria-label="Abrir assistente IBM watsonx"
-    >
-      <i className="fas fa-comment-dots"></i>
-      <span className={styles.tooltip}>Assistente IBM watsonx</span>
-    </button>
-  );
+  return <CustomChat />;
 }
