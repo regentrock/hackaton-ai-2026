@@ -15,42 +15,33 @@ interface OrchestrateChatProps {
   orchestrationId: string;
   agentId: string;
   hostURL?: string;
+  onClose?: () => void;
 }
 
 export default function OrchestrateChat({ 
   orchestrationId, 
   agentId, 
-  hostURL = "https://dl.watson-orchestrate.ibm.com" 
+  hostURL = "https://dl.watson-orchestrate.ibm.com",
+  onClose 
 }: OrchestrateChatProps) {
   const { user } = useAuth();
   const containerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const initialized = useRef(false);
 
   useEffect(() => {
     if (initialized.current) return;
     if (!user) return;
+    if (!containerRef.current) return;
 
     initialized.current = true;
+    setIsLoading(true);
 
-    // Suprimir erros específicos do Orchestrate no console
-    const originalConsoleError = console.error;
-    console.error = (...args) => {
-      const message = args[0]?.toString() || '';
-      if (message.includes('WxOChat') || 
-          message.includes('getUserProfile') || 
-          message.includes('401') ||
-          message.includes('NoJwtError')) {
-        return; // Ignorar
-      }
-      originalConsoleError(...args);
-    };
-
-    // Configurar o Orchestrate
     window.wxOConfiguration = {
       orchestrationID: orchestrationId,
       hostURL: hostURL,
-      rootElementID: "orchestrate-chat-root",
+      rootElementID: containerRef.current.id,
       chatOptions: {
         agentId: agentId,
         userContext: {
@@ -60,12 +51,10 @@ export default function OrchestrateChat({
           userSkills: user.skills || [],
           userLocation: user.location || '',
           userDescription: user.description || '',
-          userAvailability: user.availability || ''
         }
       }
     };
 
-    // Carregar o script do Orchestrate
     const script = document.createElement('script');
     script.src = `${hostURL}/wxochat/wxoLoader.js?embed=true`;
     script.async = true;
@@ -80,13 +69,13 @@ export default function OrchestrateChat({
     
     script.onerror = () => {
       console.error('❌ Erro ao carregar o Orchestrate Chat');
+      setError('Erro ao carregar o assistente. Tente novamente.');
       setIsLoading(false);
     };
     
     document.head.appendChild(script);
 
     return () => {
-      console.error = originalConsoleError;
       if (window.wxoLoader && window.wxoLoader.destroy) {
         window.wxoLoader.destroy();
       }
@@ -105,28 +94,23 @@ export default function OrchestrateChat({
             <p>Baseado nas suas habilidades</p>
           </div>
         </div>
-        <button 
-          className={styles.closeButton}
-          onClick={() => {
-            if (window.wxoLoader && window.wxoLoader.destroy) {
-              window.wxoLoader.destroy();
-            }
-            // Recarregar a página para limpar
-            window.location.reload();
-          }}
-        >
+        <button onClick={onClose} className={styles.closeButton}>
           <i className="fas fa-times"></i>
         </button>
       </div>
-      
+      <div id="orchestrate-chat-root" ref={containerRef} className={styles.chatRoot} />
       {isLoading && (
         <div className={styles.loadingOverlay}>
           <div className={styles.spinner}></div>
           <p>Carregando assistente...</p>
         </div>
       )}
-      
-      <div id="orchestrate-chat-root" className={styles.chatWidget} />
+      {error && (
+        <div className={styles.errorOverlay}>
+          <i className="fas fa-exclamation-circle"></i>
+          <p>{error}</p>
+        </div>
+      )}
     </div>
   );
 }

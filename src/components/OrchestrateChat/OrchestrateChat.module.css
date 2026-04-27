@@ -17,7 +17,7 @@
 .chatHeader {
   background: linear-gradient(135deg, var(--color-primary, #b02629), var(--color-primary-dark, #8d1206));
   color: white;
-  padding: 16px 20px;
+  padding: 14px 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -31,7 +31,7 @@
 }
 
 .chatHeaderInfo i {
-  font-size: 1.4rem;
+  font-size: 1.3rem;
 }
 
 .chatHeaderInfo h3 {
@@ -41,7 +41,7 @@
 }
 
 .chatHeaderInfo p {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   margin: 2px 0 0;
   opacity: 0.85;
 }
@@ -64,13 +64,12 @@
   background: rgba(255, 255, 255, 0.3);
 }
 
-.chatWidget {
+.chatRoot {
   flex: 1;
   width: 100%;
   background: #f8fafc;
 }
 
-/* Loading e Error */
 .loadingOverlay {
   position: absolute;
   top: 60px;
@@ -96,7 +95,9 @@
 }
 
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .loadingOverlay p {
@@ -131,16 +132,6 @@
   font-size: 0.875rem;
 }
 
-.errorOverlay button {
-  padding: 8px 20px;
-  background: var(--color-primary);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 500;
-}
-
 @keyframes slideUp {
   from {
     opacity: 0;
@@ -152,11 +143,10 @@
   }
 }
 
-/* Responsivo */
 @media (max-width: 640px) {
   .chatContainer {
     width: calc(100vw - 32px);
-    height: 65vh;
+    height: 60vh;
     right: 16px;
     bottom: 80px;
     left: 16px;
