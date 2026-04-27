@@ -1,3 +1,4 @@
+// layout.tsx - Versão com sugestão de tradução (não 100% automática)
 import { AuthProvider } from '@/src/contexts/AuthContext';
 import type { Metadata, Viewport } from 'next';
 import Navbar from '@/src/components/Navbar/Navbar';
@@ -56,6 +57,18 @@ export default function RootLayout({
         <link rel="icon" href="/logo-icon.png" type="image/png" />
         <link rel="shortcut icon" href="/logo-icon.png" />
         <link rel="apple-touch-icon" href="/logo-icon.png" />
+        
+        {/* Sugere ao Google Chrome que ofereça tradução para português */}
+        {/* NÃO TRADUZ AUTOMATICAMENTE - apenas sugere */}
+        <meta name="google" content="notranslate" />
+        
+        {/* Força o navegador a tratar o conteúdo como português */}
+        <meta name="language" content="Portuguese" />
+        <meta name="content-language" content="pt-BR" />
+        <meta httpEquiv="Content-Language" content="pt-BR" />
+        
+        {/* Meta tag para especificar o idioma do conteúdo */}
+        <meta charSet="UTF-8" />
       </head>
       <body>
         <AuthProvider>
