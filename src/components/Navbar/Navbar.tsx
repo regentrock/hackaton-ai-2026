@@ -7,6 +7,9 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/src/contexts/AuthContext';
 import styles from './Navbar.module.css';
 
+const AGENT_ID = "ae187a51-172a-4288-b5fe-fefae23ab71f";
+const CHAT_URL = `https://dl.watson-orchestrate.ibm.com/chat?agentId=${AGENT_ID}`;
+
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -36,21 +39,81 @@ export default function Navbar() {
     setIsMenuOpen(false);
   };
 
+  const openAssistant = () => {
+    window.open(CHAT_URL, '_blank', 'noopener,noreferrer');
+  };
+
   // Links para usuário logado
   const loggedInLinks = [
-    { href: '/', label: 'Início' },
-    { href: '/matches', label: 'Oportunidades' },
-    { href: '/dashboard', label: 'Perfil' },
+    { href: '/', label: 'Início', action: null },
+    { href: '/matches', label: 'Oportunidades', action: null },
+    { label: 'Assistente IA', action: openAssistant, icon: 'fas fa-robot' },
+    { href: '/dashboard', label: 'Perfil', action: null },
   ];
 
   // Links para usuário não logado
   const loggedOutLinks = [
-    { href: '/', label: 'Início' },
-    { href: '/login', label: 'Entrar' },
-    { href: '/register', label: 'Cadastrar' },
+    { href: '/', label: 'Início', action: null },
+    { href: '/login', label: 'Entrar', action: null },
+    { href: '/register', label: 'Cadastrar', action: null },
   ];
 
   const links = user ? loggedInLinks : loggedOutLinks;
+
+  const renderLink = (link: any) => {
+    if (link.action) {
+      return (
+        <button
+          key={link.label}
+          onClick={link.action}
+          className={styles.navLink}
+        >
+          {link.icon && <i className={link.icon} style={{ marginRight: '0.5rem' }}></i>}
+          {link.label}
+        </button>
+      );
+    }
+    return (
+      <Link
+        key={link.href}
+        href={link.href}
+        className={`${styles.navLink} ${pathname === link.href ? styles.active : ''}`}
+        onClick={closeMenu}
+      >
+        {link.icon && <i className={link.icon} style={{ marginRight: '0.5rem' }}></i>}
+        {link.label}
+      </Link>
+    );
+  };
+
+  const renderMobileLink = (link: any) => {
+    if (link.action) {
+      return (
+        <button
+          key={link.label}
+          onClick={() => {
+            link.action();
+            closeMenu();
+          }}
+          className={styles.mobileNavLink}
+        >
+          {link.icon && <i className={link.icon} style={{ marginRight: '0.5rem', width: '20px' }}></i>}
+          {link.label}
+        </button>
+      );
+    }
+    return (
+      <Link
+        key={link.href}
+        href={link.href}
+        className={`${styles.mobileNavLink} ${pathname === link.href ? styles.active : ''}`}
+        onClick={closeMenu}
+      >
+        {link.icon && <i className={link.icon} style={{ marginRight: '0.5rem', width: '20px' }}></i>}
+        {link.label}
+      </Link>
+    );
+  };
 
   return (
     <nav className={`${styles.navbar} ${scrolled ? styles.scrolled : ''}`}>
@@ -69,18 +132,11 @@ export default function Navbar() {
 
         {/* Desktop Menu */}
         <div className={styles.desktopMenu}>
-          {links.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className={`${styles.navLink} ${pathname === link.href ? styles.active : ''}`}
-            >
-              {link.label}
-            </Link>
-          ))}
+          {links.map((link) => renderLink(link))}
           
           {user && (
             <button onClick={handleLogout} className={styles.logoutButton}>
+              <i className="fas fa-sign-out-alt" style={{ marginRight: '0.5rem' }}></i>
               Sair
             </button>
           )}
@@ -115,22 +171,15 @@ export default function Navbar() {
                 className={styles.mobileLogoImage}
               />
             </div>
+            <button className={styles.closeButton} onClick={closeMenu}>✕</button>
           </div>
           
           <div className={styles.mobileMenuLinks}>
-            {links.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={`${styles.mobileNavLink} ${pathname === link.href ? styles.active : ''}`}
-                onClick={closeMenu}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {links.map((link) => renderMobileLink(link))}
             
             {user && (
               <button onClick={handleLogout} className={styles.mobileLogoutButton}>
+                <i className="fas fa-sign-out-alt" style={{ marginRight: '0.5rem' }}></i>
                 Sair
               </button>
             )}

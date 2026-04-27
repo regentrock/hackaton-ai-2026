@@ -1,29 +1,28 @@
 'use client';
 
-import { useState } from 'react';
 import { useAuth } from '@/src/contexts/AuthContext';
-import dynamic from 'next/dynamic';
 import styles from './FloatingChatButton.module.css';
 
-const OrchestrateChat = dynamic(() => import('./OrchestrateChat'), { ssr: false });
+const AGENT_ID = "ae187a51-172a-4288-b5fe-fefae23ab71f";
+const CHAT_URL = `https://dl.watson-orchestrate.ibm.com/chat?agentId=${AGENT_ID}`;
 
 export default function FloatingChatButton() {
-  const [isOpen, setIsOpen] = useState(false);
   const { user } = useAuth();
 
   if (!user) return null;
 
+  const openChat = () => {
+    window.open(CHAT_URL, '_blank', 'noopener,noreferrer');
+  };
+
   return (
-    <>
-      <button className={styles.chatButton} onClick={() => setIsOpen(true)}>
-        <i className="fas fa-comment-dots"></i>
-      </button>
-      {isOpen && (
-        <>
-          <div className={styles.overlay} onClick={() => setIsOpen(false)} />
-          <OrchestrateChat onClose={() => setIsOpen(false)} />
-        </>
-      )}
-    </>
+    <button 
+      className={styles.chatButton}
+      onClick={openChat}
+      aria-label="Abrir assistente IBM watsonx"
+    >
+      <i className="fas fa-comment-dots"></i>
+      <span className={styles.tooltip}>Assistente IBM watsonx</span>
+    </button>
   );
 }

@@ -5,7 +5,7 @@
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--color-primary, #b02629), var(--color-primary-dark, #8d1206));
+  background: linear-gradient(135deg, #052FAD, #0062FF);
   color: white;
   border: none;
   cursor: pointer;
@@ -20,7 +20,7 @@
 
 .chatButton:hover {
   transform: scale(1.05);
-  box-shadow: 0 6px 20px rgba(176, 38, 41, 0.4);
+  box-shadow: 0 6px 20px rgba(5, 47, 173, 0.4);
 }
 
 .tooltip {
@@ -41,15 +41,4 @@
 .chatButton:hover .tooltip {
   opacity: 1;
   visibility: visible;
-}
-
-.overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.4);
-  z-index: 1000;
-  backdrop-filter: blur(2px);
 }
