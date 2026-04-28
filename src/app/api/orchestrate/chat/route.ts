@@ -1,22 +1,25 @@
 // app/api/orchestrate/chat/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
-// Armazenar histórico de conversas por usuário
-const conversationHistory = new Map<string, Array<{ role: string, content: string }>>();
+// Armazenar conversas por usuário
+const conversations = new Map<string, Array<{ role: string, content: string }>>();
 
 export async function POST(request: NextRequest) {
   try {
-    const { message, userId, sessionId } = await request.json();
+    const { message, userId, history, sessionId } = await request.json();
     
     console.log(`[WatsonX] Mensagem de ${userId}: "${message}"`);
     
-    // Obter histórico do usuário
-    let history = conversationHistory.get(userId) || [];
+    // Usar histórico enviado ou buscar do armazenamento
+    let conversationHistory = history;
+    if (!conversationHistory || conversationHistory.length === 0) {
+      conversationHistory = conversations.get(userId) || [];
+    }
     
-    // Adicionar mensagem do usuário ao histórico
-    history.push({ role: 'user', content: message });
+    // Adicionar mensagem atual
+    conversationHistory.push({ role: 'user', content: message });
     
-    // Buscar oportunidades relevantes baseado na mensagem
+    // Buscar oportunidades baseado na mensagem
     const area = extractArea(message);
     let opportunities: any[] = [];
     
@@ -24,24 +27,30 @@ export async function POST(request: NextRequest) {
       opportunities = await fetchOpportunities(area);
       console.log(`[WatsonX] Encontradas ${opportunities.length} oportunidades para ${area}`);
     } else {
-      // Buscar oportunidades gerais se não tiver área específica
-      opportunities = await fetchOpportunities('');
+      // Verificar se já tem uma área das mensagens anteriores
+      const previousArea = detectAreaFromHistory(conversationHistory);
+      if (previousArea) {
+        opportunities = await fetchOpportunities(previousArea);
+        console.log(`[WatsonX] Usando área anterior: ${previousArea}`);
+      } else {
+        opportunities = await fetchOpportunities('');
+      }
     }
     
-    // Construir prompt para o WatsonX
-    const prompt = buildPrompt(message, history, opportunities, area);
+    // Construir prompt com contexto
+    const prompt = buildPromptWithContext(message, conversationHistory, opportunities, area);
     
-    // Chamar IBM WatsonX (Granite)
+    // Chamar IBM WatsonX
     const response = await callWatsonX(prompt);
     
     // Adicionar resposta ao histórico
-    history.push({ role: 'assistant', content: response });
+    conversationHistory.push({ role: 'assistant', content: response });
     
-    // Manter apenas as últimas 10 mensagens
-    if (history.length > 10) {
-      history = history.slice(-10);
+    // Armazenar apenas as últimas 20 mensagens
+    if (conversationHistory.length > 20) {
+      conversationHistory = conversationHistory.slice(-20);
     }
-    conversationHistory.set(userId, history);
+    conversations.set(userId, conversationHistory);
     
     return NextResponse.json({
       response: response,
@@ -50,44 +59,56 @@ export async function POST(request: NextRequest) {
     
   } catch (error: any) {
     console.error('[WatsonX] Erro:', error);
-    
-    // Fallback
     return NextResponse.json({
       response: `Olá! Sou seu assistente de voluntariado. Me diga qual área você tem interesse (Educação, Saúde, Meio Ambiente, Tecnologia ou Social) e vou buscar as melhores oportunidades para você!`
     });
   }
 }
 
-function buildPrompt(message: string, history: any[], opportunities: any[], detectedArea: string): string {
+function detectAreaFromHistory(history: any[]): string {
+  for (const msg of history.slice().reverse()) {
+    if (msg.role === 'user') {
+      const area = extractArea(msg.content);
+      if (area) return area;
+    }
+  }
+  return '';
+}
+
+function buildPromptWithContext(message: string, history: any[], opportunities: any[], detectedArea: string): string {
+  // Construir histórico formatado
+  const formattedHistory = history.slice(-6).map(msg => {
+    const role = msg.role === 'user' ? 'Usuário' : 'Assistente';
+    return `${role}: ${msg.content}`;
+  }).join('\n');
+  
   const oppsText = opportunities.length > 0 
     ? `OPORTUNIDADES DISPONÍVEIS:\n${opportunities.slice(0, 5).map((opp, i) => 
         `${i+1}. ${opp.title} - ${opp.organization} (${opp.location}) - Compatibilidade: ${opp.matchScore}%\n   ${opp.reasoning}`
       ).join('\n\n')}`
     : 'Nenhuma oportunidade específica encontrada para esta área.';
   
-  const areaText = detectedArea ? `Área de interesse identificada: ${detectedArea}` : 'Ainda não identifiquei uma área específica.';
+  const areaText = detectedArea ? `Área de interesse: ${detectedArea}` : 'Área ainda não especificada.';
   
-  return `[INST] Você é o VolunteerMatcher, um assistente especializado em conectar voluntários a oportunidades de voluntariado.
+  return `[INST] Você é o VolunteerMatcher, um assistente especializado em voluntariado.
 
-INSTRUÇÕES IMPORTANTES:
-1. Seja sempre educado, empático e encorajador
-2. Responda em português (PT-BR)
-3. Use emojis moderadamente (📚, 🏥, 🌱, 💻, 🤝)
-4. Se o usuário pedir oportunidades em uma área, use as oportunidades listadas abaixo
-5. Se não houver oportunidades para a área, sugira outras áreas
-6. Mantenha as respostas concisas (2-4 frases por vez)
-7. Sempre ofereça ajuda adicional
+REGRAS:
+1. Responda em português (PT-BR)
+2. Seja educado e encorajador
+3. Use emojis com moderação (📚🏥🌱💻🤝)
+4. Se o usuário pedir oportunidades, use a lista abaixo
+5. Mantenha respostas concisas (máximo 4 frases)
+6. SEMPRE ofereça ajuda adicional
 
-CONTEXTO DA CONVERSA:
-${history.slice(-3).map(h => `${h.role === 'user' ? 'Usuário' : 'Assistente'}: ${h.content}`).join('\n')}
+HISTÓRICO DA CONVERSA:
+${formattedHistory}
 
-ÁREA IDENTIFICADA: ${areaText}
+${areaText}
+${opportunities.length > 0 ? `\n${oppsText}` : ''}
 
-${oppsText}
+PERGUNTA ATUAL: ${message}
 
-PERGUNTA DO USUÁRIO: ${message}
-
-Responda de forma natural e útil, usando as oportunidades disponíveis se relevante. Se o usuário não especificou uma área, pergunte qual ele tem interesse.
+Responda de forma natural e útil, considerando o histórico da conversa. Se o usuário ainda não especificou uma área, pergunte qual ele tem interesse.
 
 SUA RESPOSTA:[/INST]`;
 }
@@ -109,7 +130,6 @@ async function callWatsonX(prompt: string): Promise<string> {
         max_new_tokens: 500,
         temperature: 0.7,
         top_p: 0.9,
-        top_k: 50,
         repetition_penalty: 1.1
       },
       model_id: 'ibm/granite-3-8b-instruct',
@@ -124,10 +144,7 @@ async function callWatsonX(prompt: string): Promise<string> {
   const data = await response.json();
   let generatedText = data.results?.[0]?.generated_text || '';
   
-  // Limpar a resposta
   generatedText = generatedText.trim();
-  
-  // Se a resposta ainda tiver o prompt, remover
   if (generatedText.includes('SUA RESPOSTA:')) {
     generatedText = generatedText.split('SUA RESPOSTA:')[1].trim();
   }
@@ -163,10 +180,10 @@ function extractArea(message: string): string {
   if (msg.includes('saúde') || msg.includes('saude') || msg.includes('health') || msg.includes('hospital')) {
     return 'Saúde';
   }
-  if (msg.includes('ambiente') || msg.includes('environment') || msg.includes('ecologia') || msg.includes('sustentabilidade')) {
+  if (msg.includes('ambiente') || msg.includes('environment') || msg.includes('ecologia')) {
     return 'Meio Ambiente';
   }
-  if (msg.includes('tecnologia') || msg.includes('technology') || msg.includes('tech') || msg.includes('programação')) {
+  if (msg.includes('tecnologia') || msg.includes('technology') || msg.includes('tech')) {
     return 'Tecnologia';
   }
   if (msg.includes('social') || msg.includes('community') || msg.includes('comunidade')) {

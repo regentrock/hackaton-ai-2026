@@ -17,6 +17,7 @@ export default function CustomChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -25,17 +26,7 @@ export default function CustomChat() {
       setMessages([
         {
           id: 'welcome',
-          text: `Olá ${user.name?.split(' ')[0] || 'Voluntário'}! 👋
-
-Sou seu assistente de voluntariado. Posso ajudar você a encontrar oportunidades nas áreas:
-
-📚 Educação
-🏥 Saúde
-🌱 Meio Ambiente
-💻 Tecnologia
-🤝 Social
-
-Qual área você tem interesse?`,
+          text: `Olá ${user.name?.split(' ')[0] || 'Voluntário'}! 👋\n\nSou seu assistente de voluntariado. Posso ajudar você a encontrar oportunidades nas áreas:\n\n📚 Educação\n🏥 Saúde\n🌱 Meio Ambiente\n💻 Tecnologia\n🤝 Social\n\nQual área você tem interesse?`,
           sender: 'bot',
           timestamp: new Date()
         }
@@ -58,20 +49,36 @@ Qual área você tem interesse?`,
     };
 
     setMessages(prev => [...prev, userMessage]);
+    const currentMessage = inputValue;
     setInputValue('');
     setIsLoading(true);
 
     try {
+      // Enviar TODAS as mensagens anteriores para manter contexto
+      const conversationHistory = messages.map(msg => ({
+        role: msg.sender === 'user' ? 'user' : 'assistant',
+        content: msg.text
+      }));
+      
+      // Adicionar a mensagem atual
+      conversationHistory.push({ role: 'user', content: currentMessage });
+
       const response = await fetch('/api/orchestrate/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: inputValue,
-          userId: user.id
+          message: currentMessage,
+          userId: user.id,
+          sessionId: sessionId,
+          history: conversationHistory.slice(-10) // Últimas 10 mensagens
         })
       });
 
       const data = await response.json();
+      
+      if (data.sessionId) {
+        setSessionId(data.sessionId);
+      }
 
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),
