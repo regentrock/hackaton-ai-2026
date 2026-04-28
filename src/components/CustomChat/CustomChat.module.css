@@ -1,3 +1,4 @@
+/* components/CustomChat/CustomChat.module.css */
 .chatButton {
   position: fixed;
   bottom: 24px;
@@ -104,22 +105,29 @@
   justify-content: flex-start;
 }
 
-.messageContent {
+/* Bot message - fundo branco com texto escuro */
+.bot .messageContent {
   background: white;
+  color: #1a1a1a;
   padding: 10px 14px;
   border-radius: 16px;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
+/* User message - fundo vermelho com texto branco */
 .user .messageContent {
   background: linear-gradient(135deg, #b02629, #8d1206);
   color: white;
+  padding: 10px 14px;
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
 }
 
 .messageContent p {
   margin: 0;
   font-size: 14px;
   line-height: 1.5;
+  color: inherit;
 }
 
 .time {
@@ -127,6 +135,10 @@
   color: #999;
   display: block;
   margin-top: 4px;
+}
+
+.bot .time {
+  color: #adb5bd;
 }
 
 .user .time {
