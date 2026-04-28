@@ -17,7 +17,6 @@ export default function CustomChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const { user } = useAuth();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -26,7 +25,17 @@ export default function CustomChat() {
       setMessages([
         {
           id: 'welcome',
-          text: `Olá ${user.name?.split(' ')[0] || 'Voluntário'}! 👋\n\nSou seu assistente de voluntariado. Posso ajudar você a encontrar oportunidades nas áreas:\n\n📚 Educação\n🏥 Saúde\n🌱 Meio Ambiente\n💻 Tecnologia\n🤝 Social\n\nComo posso ajudar hoje?`,
+          text: `Olá ${user.name?.split(' ')[0] || 'Voluntário'}! 👋
+
+Sou seu assistente de voluntariado. Posso ajudar você a encontrar oportunidades nas áreas:
+
+📚 Educação
+🏥 Saúde
+🌱 Meio Ambiente
+💻 Tecnologia
+🤝 Social
+
+Qual área você tem interesse?`,
           sender: 'bot',
           timestamp: new Date()
         }
@@ -58,16 +67,11 @@ export default function CustomChat() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: inputValue,
-          userId: user.id,
-          sessionId: sessionId
+          userId: user.id
         })
       });
 
       const data = await response.json();
-      
-      if (data.sessionId) {
-        setSessionId(data.sessionId);
-      }
 
       const botMessage: Message = {
         id: (Date.now() + 1).toString(),

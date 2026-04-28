@@ -1,66 +1,179 @@
 // app/api/orchestrate/chat/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 
-const AGENT_ID = "ae187a51-172a-4288-b5fe-fefae23ab71f";
-const ORCHESTRATION_ID = "20260423-1400-2730-305f-ec6ede7a1a7a_20260423-1400-4202-20dc-0f3e2d98827b";
-
-const sessions = new Map<string, string>();
+// Armazenar histórico de conversas por usuário
+const conversationHistory = new Map<string, Array<{ role: string, content: string }>>();
 
 export async function POST(request: NextRequest) {
   try {
     const { message, userId, sessionId } = await request.json();
     
-    console.log(`[Chat] Mensagem: "${message}"`);
+    console.log(`[WatsonX] Mensagem de ${userId}: "${message}"`);
     
-    // Se for saudação ou pergunta sobre área, responder diretamente
-    const msgLower = message.toLowerCase().trim();
+    // Obter histórico do usuário
+    let history = conversationHistory.get(userId) || [];
     
-    if (msgLower === 'oi' || msgLower === 'olá' || msgLower === 'ola') {
-      return NextResponse.json({
-        response: `Olá! 👋\n\nSou seu assistente de voluntariado. Posso ajudar você a encontrar oportunidades nas áreas:\n\n📚 Educação\n🏥 Saúde\n🌱 Meio Ambiente\n💻 Tecnologia\n🤝 Social\n\nQual área você tem interesse?`
-      });
-    }
+    // Adicionar mensagem do usuário ao histórico
+    history.push({ role: 'user', content: message });
     
-    // Detectar área de interesse
-    let area = '';
-    if (msgLower.includes('educação') || msgLower.includes('ensino') || msgLower.includes('escola')) {
-      area = 'Educação';
-    } else if (msgLower.includes('saúde') || msgLower.includes('saude') || msgLower.includes('hospital')) {
-      area = 'Saúde';
-    } else if (msgLower.includes('ambiente') || msgLower.includes('ecologia') || msgLower.includes('sustentabilidade')) {
-      area = 'Meio Ambiente';
-    } else if (msgLower.includes('tecnologia') || msgLower.includes('tech') || msgLower.includes('programação')) {
-      area = 'Tecnologia';
-    } else if (msgLower.includes('social') || msgLower.includes('comunidade')) {
-      area = 'Social';
-    }
+    // Buscar oportunidades relevantes baseado na mensagem
+    const area = extractArea(message);
+    let opportunities: any[] = [];
     
-    // Se detectou área, buscar oportunidades
     if (area) {
-      const opportunities = await fetchOpportunities(area);
-      const response = formatOpportunitiesResponse(opportunities, area);
-      return NextResponse.json({ response });
+      opportunities = await fetchOpportunities(area);
+      console.log(`[WatsonX] Encontradas ${opportunities.length} oportunidades para ${area}`);
+    } else {
+      // Buscar oportunidades gerais se não tiver área específica
+      opportunities = await fetchOpportunities('');
     }
     
-    // Se não detectou área, pedir para especificar
+    // Construir prompt para o WatsonX
+    const prompt = buildPrompt(message, history, opportunities, area);
+    
+    // Chamar IBM WatsonX (Granite)
+    const response = await callWatsonX(prompt);
+    
+    // Adicionar resposta ao histórico
+    history.push({ role: 'assistant', content: response });
+    
+    // Manter apenas as últimas 10 mensagens
+    if (history.length > 10) {
+      history = history.slice(-10);
+    }
+    conversationHistory.set(userId, history);
+    
     return NextResponse.json({
-      response: `Me diga qual área você tem interesse:
-
-📚 Educação
-🏥 Saúde
-🌱 Meio Ambiente
-💻 Tecnologia
-🤝 Social
-
-Assim posso buscar as melhores oportunidades para você!`
+      response: response,
+      sessionId: sessionId || userId
     });
     
   } catch (error: any) {
-    console.error('[Chat] Erro:', error);
+    console.error('[WatsonX] Erro:', error);
+    
+    // Fallback
     return NextResponse.json({
       response: `Olá! Sou seu assistente de voluntariado. Me diga qual área você tem interesse (Educação, Saúde, Meio Ambiente, Tecnologia ou Social) e vou buscar as melhores oportunidades para você!`
     });
   }
+}
+
+function buildPrompt(message: string, history: any[], opportunities: any[], detectedArea: string): string {
+  const oppsText = opportunities.length > 0 
+    ? `OPORTUNIDADES DISPONÍVEIS:\n${opportunities.slice(0, 5).map((opp, i) => 
+        `${i+1}. ${opp.title} - ${opp.organization} (${opp.location}) - Compatibilidade: ${opp.matchScore}%\n   ${opp.reasoning}`
+      ).join('\n\n')}`
+    : 'Nenhuma oportunidade específica encontrada para esta área.';
+  
+  const areaText = detectedArea ? `Área de interesse identificada: ${detectedArea}` : 'Ainda não identifiquei uma área específica.';
+  
+  return `[INST] Você é o VolunteerMatcher, um assistente especializado em conectar voluntários a oportunidades de voluntariado.
+
+INSTRUÇÕES IMPORTANTES:
+1. Seja sempre educado, empático e encorajador
+2. Responda em português (PT-BR)
+3. Use emojis moderadamente (📚, 🏥, 🌱, 💻, 🤝)
+4. Se o usuário pedir oportunidades em uma área, use as oportunidades listadas abaixo
+5. Se não houver oportunidades para a área, sugira outras áreas
+6. Mantenha as respostas concisas (2-4 frases por vez)
+7. Sempre ofereça ajuda adicional
+
+CONTEXTO DA CONVERSA:
+${history.slice(-3).map(h => `${h.role === 'user' ? 'Usuário' : 'Assistente'}: ${h.content}`).join('\n')}
+
+ÁREA IDENTIFICADA: ${areaText}
+
+${oppsText}
+
+PERGUNTA DO USUÁRIO: ${message}
+
+Responda de forma natural e útil, usando as oportunidades disponíveis se relevante. Se o usuário não especificou uma área, pergunte qual ele tem interesse.
+
+SUA RESPOSTA:[/INST]`;
+}
+
+async function callWatsonX(prompt: string): Promise<string> {
+  const token = await getIBMToken();
+  const projectId = process.env.IBM_PROJECT_ID;
+  const url = `${process.env.IBM_URL}/ml/v1/text/generation?version=2023-05-29`;
+  
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      input: prompt,
+      parameters: {
+        max_new_tokens: 500,
+        temperature: 0.7,
+        top_p: 0.9,
+        top_k: 50,
+        repetition_penalty: 1.1
+      },
+      model_id: 'ibm/granite-3-8b-instruct',
+      project_id: projectId
+    })
+  });
+  
+  if (!response.ok) {
+    throw new Error(`WatsonX API error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  let generatedText = data.results?.[0]?.generated_text || '';
+  
+  // Limpar a resposta
+  generatedText = generatedText.trim();
+  
+  // Se a resposta ainda tiver o prompt, remover
+  if (generatedText.includes('SUA RESPOSTA:')) {
+    generatedText = generatedText.split('SUA RESPOSTA:')[1].trim();
+  }
+  if (generatedText.includes('[/INST]')) {
+    generatedText = generatedText.split('[/INST]')[1].trim();
+  }
+  
+  return generatedText;
+}
+
+async function getIBMToken(): Promise<string> {
+  const apiKey = process.env.IBM_API_KEY;
+  
+  const response = await fetch('https://iam.cloud.ibm.com/identity/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      grant_type: 'urn:ibm:params:oauth:grant-type:apikey',
+      apikey: apiKey!
+    })
+  });
+  
+  const data = await response.json();
+  return data.access_token;
+}
+
+function extractArea(message: string): string {
+  const msg = message.toLowerCase();
+  
+  if (msg.includes('educação') || msg.includes('education') || msg.includes('ensino') || msg.includes('escola')) {
+    return 'Educação';
+  }
+  if (msg.includes('saúde') || msg.includes('saude') || msg.includes('health') || msg.includes('hospital')) {
+    return 'Saúde';
+  }
+  if (msg.includes('ambiente') || msg.includes('environment') || msg.includes('ecologia') || msg.includes('sustentabilidade')) {
+    return 'Meio Ambiente';
+  }
+  if (msg.includes('tecnologia') || msg.includes('technology') || msg.includes('tech') || msg.includes('programação')) {
+    return 'Tecnologia';
+  }
+  if (msg.includes('social') || msg.includes('community') || msg.includes('comunidade')) {
+    return 'Social';
+  }
+  
+  return '';
 }
 
 async function fetchOpportunities(area: string): Promise<any[]> {
@@ -75,31 +188,4 @@ async function fetchOpportunities(area: string): Promise<any[]> {
     console.error('Erro ao buscar oportunidades:', error);
     return [];
   }
-}
-
-function formatOpportunitiesResponse(opportunities: any[], area: string): string {
-  if (opportunities.length === 0) {
-    return `🔍 Não encontrei oportunidades na área de ${area} no momento.\n\n📌 Que tal tentar uma dessas áreas?\n\n📚 Educação\n🏥 Saúde\n🌱 Meio Ambiente\n💻 Tecnologia\n🤝 Social\n\nPosso ajudar com outra área!`;
-  }
-  
-  let response = `🔍 Encontrei ${opportunities.length} oportunidade${opportunities.length > 1 ? 's' : ''} na área de ${area}:\n\n`;
-  
-  opportunities.slice(0, 5).forEach((opp, index) => {
-    let icon = '⭐';
-    const theme = (opp.theme || '').toLowerCase();
-    if (theme.includes('education')) icon = '📚';
-    else if (theme.includes('health')) icon = '🏥';
-    else if (theme.includes('environment') || theme.includes('climate')) icon = '🌱';
-    else if (theme.includes('technology')) icon = '💻';
-    
-    response += `${index + 1}. ${icon} **${opp.title}**\n`;
-    response += `   📍 ${opp.organization}\n`;
-    response += `   📍 ${opp.location}\n`;
-    response += `   🎯 ${opp.matchScore}% compatível\n`;
-    response += `   💡 ${opp.reasoning}\n\n`;
-  });
-  
-  response += `---\n⭐ Qual dessas oportunidades mais te interessou? Posso te dar mais detalhes!`;
-  
-  return response;
 }
